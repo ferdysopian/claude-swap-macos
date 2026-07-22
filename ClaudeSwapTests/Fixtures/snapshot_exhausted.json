@@ -1,0 +1,50 @@
+{
+  "protocolVersion": 1,
+  "generatedAt": "2026-07-22T12:00:00Z",
+  "activeAccountId": "1",
+  "accounts": [
+    {
+      "id": "1",
+      "email": "solo@example.com",
+      "alias": null,
+      "organizationName": null,
+      "organizationId": null,
+      "kind": "oauth",
+      "isActive": true,
+      "switchable": true,
+      "disabled": false,
+      "quarantined": false,
+      "quarantineReason": null,
+      "addedAt": "2026-06-01T09:00:00Z",
+      "usage": {
+        "windows": [
+          { "id": "5h", "label": "5 hour", "utilizationPct": 100, "resetsAt": "2026-07-22T12:30:00Z" },
+          { "id": "7d", "label": "7 day", "utilizationPct": 100, "resetsAt": "2026-07-23T00:00:00Z" }
+        ],
+        "unknown": false,
+        "lastError": null
+      }
+    }
+  ],
+  "autoSwitch": {
+    "enabled": true,
+    "strategy": "best",
+    "thresholdPct": 85,
+    "cooldownSeconds": 300,
+    "includeAPIKeyAccounts": false,
+    "lastSwitchAt": null,
+    "lastEventDescription": "all accounts exhausted; earliest reset 2026-07-23T00:00:00Z"
+  },
+  "capabilities": {
+    "supportsAutoSwitch": true,
+    "supportsAPIKeyAccounts": false,
+    "supportsExportImport": true,
+    "coreVersion": "1.2.3"
+  },
+  "diagnostics": {
+    "corePath": null,
+    "helperPID": null,
+    "uptimeSeconds": 0,
+    "warnings": []
+  }
+}

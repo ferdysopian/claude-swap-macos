@@ -1,0 +1,74 @@
+name: CI
+
+# Runs on every PR and on pushes to the integration branches. Uses NO
+# secrets: everything here is unsigned by design (see scripts/build-app.sh /
+# docs/SIGNING.md). Safe to run on forked-repo PRs.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # No secrets consulted anywhere in this workflow.
+  CI: "true"
+
+jobs:
+  verify-core-lock:
+    name: Verify core dependency lock
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify Dependencies/CoreDependency.lock.json
+        run: ./scripts/verify-core.sh
+        # Non-fatal on an unpinned (PENDING) commitSha by design — see
+        # scripts/verify-core.sh header. Real releases should additionally
+        # gate on --require-pin in release.yml.
+
+  swift-build-and-test:
+    name: Build & test ClaudeSwap (unsigned)
+    runs-on: macos-15
+    needs: verify-core-lock
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "26.3"
+
+      - name: Build (Debug, unsigned)
+        run: ./scripts/build-app.sh --config Debug --action build
+        # Gracefully exits 0 if ClaudeSwap.xcodeproj isn't fully scaffolded
+        # yet — see scripts/build-app.sh. Once the project lands this
+        # actually builds.
+
+      - name: Test (Debug, unsigned)
+        run: ./scripts/build-app.sh --config Debug --action test
+
+  shell-lint:
+    name: Shellcheck scripts/**
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: brew install shellcheck
+
+      - name: Shellcheck
+        # Run from scripts/ so `# shellcheck source=lib/common.sh` directives
+        # (relative to the checked file) resolve correctly.
+        run: |
+          cd scripts
+          shellcheck -x ./*.sh ./lib/*.sh

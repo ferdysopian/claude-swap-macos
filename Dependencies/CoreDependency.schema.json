@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/realiti4/claude-swap-macos/Dependencies/CoreDependency.schema.json",
+  "title": "CoreDependency.lock.json",
+  "description": "Schema for the pin describing which claude-swap (Python core) revision the macOS app bundles. Validated by scripts/verify-core.sh.",
+  "type": "object",
+  "required": [
+    "repository",
+    "tag",
+    "commitSha",
+    "pythonPackageVersion",
+    "bridgeProtocolVersion",
+    "helperBuildVersion",
+    "helper",
+    "localOverride"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "description": { "type": "string" },
+    "repository": {
+      "type": "string",
+      "description": "HTTPS clone URL of the canonical claude-swap repository. Configurable so forks/mirrors can be used.",
+      "pattern": "^https://.+"
+    },
+    "tag": {
+      "type": ["string", "null"],
+      "description": "Git tag pinned for this build, e.g. 'v0.24.0'. Null only before the first real pin has been made."
+    },
+    "commitSha": {
+      "type": "string",
+      "description": "Full 40-character commit SHA the tag resolves to, OR the literal placeholder 'PENDING-run-scripts/update-core.sh' before the first pin. Never a branch name.",
+      "pattern": "^([0-9a-f]{40}|PENDING-run-scripts/update-core\\.sh)$"
+    },
+    "pythonPackageVersion": {
+      "type": "string",
+      "description": "Value of [project.version] in the pinned core's pyproject.toml.",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+([ab][0-9]+|rc[0-9]+)?$"
+    },
+    "bridgeProtocolVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Version of the stdin/stdout JSON bridge protocol implemented by the helper (see contracts/**). Bump when the protocol changes incompatibly; the Swift CoreBridge client checks this against its own expected version at launch."
+    },
+    "helperBuildVersion": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Monotonically increasing build counter for the frozen helper binary, bumped by scripts/update-core.sh every time the pin changes. Independent of pythonPackageVersion (a re-pin at the same package version still bumps this)."
+    },
+    "helper": {
+      "type": "object",
+      "required": ["binaryName", "entryPointCandidates"],
+      "properties": {
+        "binaryName": {
+          "type": "string",
+          "description": "Must match the literal string ClaudeSwap/CoreBridge/BridgeProcess.swift's HelperLocator passes to Bundle.main.url(forAuxiliaryExecutable:)."
+        },
+        "bundleLocation": {
+          "type": "string",
+          "description": "Where package-release.sh places the built binary inside the .app bundle, informational (derived from binaryName + Contents/MacOS/)."
+        },
+        "entryPointCandidates": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "description": "Ordered list of Python entry points to try when freezing the helper. First one that resolves in the pinned checkout wins."
+        },
+        "note": { "type": "string" }
+      }
+    },
+    "localOverride": {
+      "type": "object",
+      "required": ["enabled", "path"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "path": { "type": "string" },
+        "note": { "type": "string" }
+      }
+    },
+    "updatedAt": {
+      "type": ["string", "null"],
+      "description": "ISO-8601 UTC timestamp set by scripts/update-core.sh."
+    },
+    "updatedBy": {
+      "type": ["string", "null"],
+      "description": "Free-form identifier (script name / CI actor) that last wrote this file."
+    }
+  },
+  "additionalProperties": false
+}

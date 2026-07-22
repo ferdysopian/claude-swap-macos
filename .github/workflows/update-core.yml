@@ -1,0 +1,78 @@
+name: Update core pin
+
+# Manually triggered. Runs scripts/update-core.sh against an EXPLICIT tag or
+# commit SHA (never a floating ref) and opens a PR with the resulting
+# Dependencies/CoreDependency.lock.json change. This workflow's job is only
+# to push a *branch* and open a *PR* — the underlying script never runs
+# `git push` itself (see scripts/update-core.sh).
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Exact tag to pin claude-swap to (mutually exclusive with sha)"
+        type: string
+        default: ""
+      sha:
+        description: "Exact 40-char commit SHA to pin claude-swap to (mutually exclusive with tag)"
+        type: string
+        default: ""
+      repo:
+        description: "Override repository URL (defaults to the one already in the lock file)"
+        type: string
+        default: ""
+      bridge_protocol_version:
+        description: "Bump bridgeProtocolVersion to this value (leave blank to keep current)"
+        type: string
+        default: ""
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-core:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate inputs
+        run: |
+          if [[ -z "${{ inputs.tag }}" && -z "${{ inputs.sha }}" ]]; then
+            echo "::error::Provide either 'tag' or 'sha' (workflow_dispatch input)." >&2
+            exit 1
+          fi
+
+      - name: Run scripts/update-core.sh
+        run: |
+          ARGS=()
+          [[ -n "${{ inputs.tag }}" ]] && ARGS+=(--tag "${{ inputs.tag }}")
+          [[ -n "${{ inputs.sha }}" ]] && ARGS+=(--sha "${{ inputs.sha }}")
+          [[ -n "${{ inputs.repo }}" ]] && ARGS+=(--repo "${{ inputs.repo }}")
+          [[ -n "${{ inputs.bridge_protocol_version }}" ]] && ARGS+=(--bridge-protocol-version "${{ inputs.bridge_protocol_version }}")
+          # ARGS is guaranteed non-empty by the validation step above (tag or
+          # sha is required), but guard the expansion anyway for safety under
+          # older bash (empty-array "${ARR[@]}" is an unbound-variable error
+          # pre-4.4 when `set -u`/`-eo pipefail` is active).
+          ./scripts/update-core.sh ${ARGS[@]+"${ARGS[@]}"}
+          # Deliberately no --commit: this job stages the file and lets
+          # create-pull-request below handle the commit + branch + push.
+
+      - name: Open PR with the updated lock file
+        uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: "chore(core): pin claude-swap to ${{ inputs.tag || inputs.sha }}"
+          title: "chore(core): pin claude-swap to ${{ inputs.tag || inputs.sha }}"
+          body: |
+            Automated re-pin via the `update-core.yml` workflow.
+
+            - Ref: `${{ inputs.tag || inputs.sha }}`
+            - Repository: `${{ inputs.repo || 'unchanged' }}`
+            - Triggered by: @${{ github.actor }}
+
+            `scripts/update-core.sh` already ran the core's test suite and a
+            smoke build of the frozen helper against this revision before
+            this PR was opened. Review `Dependencies/CoreDependency.lock.json`
+            and merge once CI is green.
+          branch: update-core/${{ inputs.tag || inputs.sha }}
+          add-paths: Dependencies/CoreDependency.lock.json
+          labels: dependencies

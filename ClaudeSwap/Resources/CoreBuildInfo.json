@@ -1,0 +1,8 @@
+{
+  "_comment": "Template describing which claude_swap core build is bundled with this app. Release CI overwrites this file (via scripts/bootstrap.sh) with the real pinned values before archiving; dev builds ship the template as-is and AppModel falls back to CLAUDE_SWAP_CORE_PATH/UserDefaults instead.",
+  "coreVersion": "0.0.0-dev",
+  "coreSource": "https://github.com/realiti4/claude-swap",
+  "coreRef": "unpinned",
+  "protocolVersion": 1,
+  "builtAt": "1970-01-01T00:00:00Z"
+}

@@ -1,0 +1,103 @@
+name: ClaudeSwap
+options:
+  createIntermediateGroups: true
+  developmentLanguage: en
+  deploymentTarget:
+    macOS: "14.0"
+  bundleIdPrefix: app.claudeswap
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "-"
+    CODE_SIGNING_REQUIRED: NO
+    CODE_SIGNING_ALLOWED: NO
+    DEVELOPMENT_TEAM: ""
+    ENABLE_HARDENED_RUNTIME: NO
+    SWIFT_STRICT_CONCURRENCY: complete
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    COMBINE_HIDPI_IMAGES: YES
+    ENABLE_PREVIEWS: YES
+    SWIFT_EMIT_LOC_STRINGS: YES
+    GENERATE_INFOPLIST_FILE: NO
+
+targets:
+  ClaudeSwap:
+    type: application
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: ClaudeSwap
+        excludes:
+          - "Resources/Info.plist"
+    settings:
+      base:
+        # NOTE: kept space-free on purpose. XcodeGen derives TEST_HOST /
+        # BUNDLE_LOADER for the test targets below from this target's
+        # *name* (ClaudeSwap), not from PRODUCT_NAME — a space here breaks
+        # that derivation (BUILD_PRODUCTS_DIR/ClaudeSwap.app won't exist).
+        # The user-visible app name "Claude Swap" comes from
+        # CFBundleName / CFBundleDisplayName in Info.plist instead, which
+        # is what Finder/Dock/menu bar actually display.
+        PRODUCT_NAME: ClaudeSwap
+        PRODUCT_BUNDLE_IDENTIFIER: app.claudeswap.ClaudeSwap
+        INFOPLIST_FILE: ClaudeSwap/Resources/Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/../Frameworks"
+
+  ClaudeSwapTests:
+    type: bundle.unit-test
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: ClaudeSwapTests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.claudeswap.ClaudeSwapTests
+        CODE_SIGNING_REQUIRED: NO
+        CODE_SIGNING_ALLOWED: NO
+    dependencies:
+      - target: ClaudeSwap
+        embed: false
+
+  ClaudeSwapUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: ClaudeSwapUITests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.claudeswap.ClaudeSwapUITests
+        CODE_SIGNING_REQUIRED: NO
+        CODE_SIGNING_ALLOWED: NO
+        TEST_TARGET_NAME: ClaudeSwap
+    dependencies:
+      - target: ClaudeSwap
+        embed: false
+
+schemes:
+  ClaudeSwap:
+    build:
+      parallelizeBuild: true
+      buildImplicitDependencies: true
+      targets:
+        ClaudeSwap: all
+        ClaudeSwapTests: [test]
+        ClaudeSwapUITests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - ClaudeSwapTests
+        - ClaudeSwapUITests
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release

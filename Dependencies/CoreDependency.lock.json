@@ -1,0 +1,26 @@
+{
+  "$schema": "./CoreDependency.schema.json",
+  "description": "Pins the exact claude-swap (Python core) revision that this macOS app bundles as a helper process. Edit only via scripts/update-core.sh — do not hand-edit commitSha/tag together, they must refer to the same revision.",
+  "repository": "https://github.com/realiti4/claude-swap",
+  "tag": "v0.22.0",
+  "commitSha": "0f817dd5033e60f1269d3d13baac3381629f2537",
+  "pythonPackageVersion": "0.22.0",
+  "bridgeProtocolVersion": 1,
+  "helperBuildVersion": 0,
+  "helper": {
+    "binaryName": "claude-swap-helper",
+    "bundleLocation": "Contents/MacOS/claude-swap-helper",
+    "entryPointCandidates": [
+      "claude_swap.bridge.__main__",
+      "claude_swap.cli:main"
+    ],
+    "note": "binaryName/bundleLocation MUST match ClaudeSwap/CoreBridge/BridgeProcess.swift's HelperLocator, which resolves the bundled helper via Bundle.main.url(forAuxiliaryExecutable: \"claude-swap-helper\") — i.e. a single executable at Contents/MacOS/, not a per-architecture path under Resources/. See docs/PACKAGING.md for how package-release.sh keeps app+helper architecture-consistent. entryPointCandidates: build-core-helper.sh uses the first entry point module that exists in the pinned core checkout; claude_swap.bridge (contracts/**) is preferred once present, claude_swap.cli:main is the fallback."
+  },
+  "localOverride": {
+    "enabled": true,
+    "path": "/path/to/claude-swap",
+    "note": "Absolute path to a sibling checkout of claude-swap used instead of fetching repository@tag/commitSha during local development. If this path does not exist on the current machine, scripts fall back to '<parent-of-repo-root>/claude-swap' (i.e. a sibling of this checkout) before giving up and requiring a real pin. Set enabled=false for CI/release builds so the pinned commitSha is used instead."
+  },
+  "updatedAt": "2026-07-22T19:00:00Z",
+  "updatedBy": "manual-pin-realiti4-v0.22.0"
+}

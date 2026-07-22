@@ -1,0 +1,72 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "app.name" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Claude Swap"
+          }
+        }
+      }
+    },
+    "app.disclaimer" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Claude Swap is an independent, unofficial companion app. Not affiliated with or endorsed by Anthropic."
+          }
+        }
+      }
+    },
+    "onboarding.welcome.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Welcome to Claude Swap"
+          }
+        }
+      }
+    },
+    "dashboard.rotate.button" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rotate to Best Account"
+          }
+        }
+      }
+    },
+    "accounts.add.button" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add Account"
+          }
+        }
+      }
+    },
+    "settings.launchAtLogin" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Launch Claude Swap at login"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}
