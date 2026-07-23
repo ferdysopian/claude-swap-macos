@@ -110,16 +110,24 @@ final class AppModel {
         didSet { UserDefaults.standard.set(coreOverridePath, forKey: HelperLocator.userDefaultsKey) }
     }
 
+    /// Wall-clock used by countdown UI. Ticked locally so reset timers advance
+    /// without re-querying the core (and without `TimelineView` in the menu bar).
+    var displayNow: Date = Date()
+
     // MARK: - Dependencies
 
     let bridge: any CoreBridgeClientProtocol
     private var eventTask: Task<Void, Never>?
+    private var clockTask: Task<Void, Never>?
     private var pollTask: Task<Void, Never>?
+    private var quietRefreshInFlight = false
     private let usingFixture: Bool
 
-    /// How often to re-fetch usage from the core/CLI so percentages and
-    /// `resetsAt` stay current without a manual refresh.
-    private static let snapshotPollInterval: Duration = .seconds(60)
+    /// Local countdown tick — cheap Observation update only.
+    private static let clockTickInterval: Duration = .seconds(30)
+    /// Re-fetch usage from core/CLI. Kept deliberately slow: `cswap list`
+    /// can hit the network for every account and must not thrash the UI.
+    private static let snapshotPollInterval: Duration = .seconds(300)
 
     private enum Keys {
         static let onboarded = "hasCompletedOnboarding"
@@ -177,6 +185,7 @@ final class AppModel {
             }
 
             await self.refreshSnapshot()
+            self.startClock()
             self.startPolling()
             // If refresh failed, run() already set errorBanner; still stay
             // connected so the UI isn't stuck on "Connecting…".
@@ -189,14 +198,32 @@ final class AppModel {
     func stop() {
         eventTask?.cancel()
         eventTask = nil
+        clockTask?.cancel()
+        clockTask = nil
         pollTask?.cancel()
         pollTask = nil
         let bridge = self.bridge
         Task { await bridge.stop() }
     }
 
-    /// Quiet background poll — keeps limit % / resetsAt fresh without
-    /// flashing the busy spinner on every tick.
+    /// Advance countdown labels without touching the bridge.
+    private func startClock() {
+        guard clockTask == nil else { return }
+        clockTask = Task { [weak self] in
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(for: Self.clockTickInterval)
+                } catch {
+                    return
+                }
+                guard let self, !Task.isCancelled else { return }
+                self.displayNow = Date()
+            }
+        }
+    }
+
+    /// Occasional background usage refresh. Skips if a user action or another
+    /// quiet poll is already in flight so the CLI actor never piles up work.
     private func startPolling() {
         guard pollTask == nil else { return }
         pollTask = Task { [weak self] in
@@ -253,10 +280,18 @@ final class AppModel {
     func refreshSnapshot(showBusy: Bool = true) async {
         if showBusy {
             await run { [bridge] in try await bridge.requestSnapshot() }
+            displayNow = Date()
             return
         }
+        guard !quietRefreshInFlight, !isBusy else { return }
+        quietRefreshInFlight = true
+        defer { quietRefreshInFlight = false }
         do {
-            snapshot = try await bridge.requestSnapshot()
+            // Assign once here; ignore the mirrored `.snapshotChanged` event
+            // if the bridge also broadcasts — same value, no extra work.
+            let next = try await bridge.requestSnapshot()
+            snapshot = next
+            displayNow = Date()
         } catch {
             // Keep the last good snapshot; don't overwrite a user-visible
             // error banner with a transient background-poll failure.

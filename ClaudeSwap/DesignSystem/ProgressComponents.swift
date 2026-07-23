@@ -11,42 +11,41 @@ struct UsageWindowBar: View {
     let window: UsageWindow
     var showsResetTime: Bool = true
 
+    @Environment(AppModel.self) private var appModel
     @Environment(\.appMotion) private var motion
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 60)) { context in
-            VStack(alignment: .leading, spacing: AppSpacing.xxs) {
-                HStack {
-                    Text(window.label)
-                        .font(AppTypography.subheadline)
-                        .foregroundStyle(AppColors.textPrimary)
-                    Spacer()
-                    Text(percentLabel)
-                        .font(AppTypography.captionEmphasized)
-                        .foregroundStyle(AppColors.status(window.status))
-                }
-                GeometryReader { proxy in
-                    ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 4, style: .continuous)
-                            .fill(AppColors.divider.opacity(0.4))
-                        RoundedRectangle(cornerRadius: 4, style: .continuous)
-                            .fill(AppColors.status(window.status))
-                            .frame(width: proxy.size.width * fraction)
-                            .animation(motion.animation(), value: fraction)
-                    }
-                }
-                .frame(height: 8)
-                if showsResetTime, let resetsAt = window.resetsAt {
-                    let countdown = UsageCountdown.compact(until: resetsAt, now: context.date) ?? ""
-                    Text(countdown.isEmpty ? "Resets \(resetsAt.formatted(.relative(presentation: .named)))" : "Resets in \(countdown)")
-                        .font(AppTypography.caption)
-                        .foregroundStyle(AppColors.textTertiary)
+        VStack(alignment: .leading, spacing: AppSpacing.xxs) {
+            HStack {
+                Text(window.label)
+                    .font(AppTypography.subheadline)
+                    .foregroundStyle(AppColors.textPrimary)
+                Spacer()
+                Text(percentLabel)
+                    .font(AppTypography.captionEmphasized)
+                    .foregroundStyle(AppColors.status(window.status))
+            }
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(AppColors.divider.opacity(0.4))
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(AppColors.status(window.status))
+                        .frame(width: proxy.size.width * fraction)
+                        .animation(motion.animation(), value: fraction)
                 }
             }
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("\(window.label) usage")
-            .accessibilityValue(percentLabel)
+            .frame(height: 8)
+            if showsResetTime, let resetsAt = window.resetsAt {
+                let countdown = UsageCountdown.compact(until: resetsAt, now: appModel.displayNow) ?? ""
+                Text(countdown.isEmpty ? "Resets \(resetsAt.formatted(.relative(presentation: .named)))" : "Resets in \(countdown)")
+                    .font(AppTypography.caption)
+                    .foregroundStyle(AppColors.textTertiary)
+            }
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(window.label) usage")
+        .accessibilityValue(percentLabel)
     }
 
     private var fraction: Double {
@@ -93,10 +92,10 @@ struct UsageRing: View {
 struct AccountUsageChips: View {
     let account: Account
 
+    @Environment(AppModel.self) private var appModel
+
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 60)) { context in
-            chips(now: context.date)
-        }
+        chips(now: appModel.displayNow)
     }
 
     @ViewBuilder

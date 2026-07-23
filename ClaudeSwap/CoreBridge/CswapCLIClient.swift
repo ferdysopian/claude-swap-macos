@@ -251,10 +251,27 @@ actor CswapCLIClient: CoreBridgeClientProtocol {
             process.standardInput = FileHandle.nullDevice
         }
 
+        // Read pipes concurrently while waiting — otherwise a full pipe
+        // buffer can deadlock `waitUntilExit` (classic Foundation Process pitfall).
+        let group = DispatchGroup()
+        var stdoutData = Data()
+        var stderrData = Data()
+        group.enter()
+        DispatchQueue.global(qos: .utility).async {
+            stdoutData = out.fileHandleForReading.readDataToEndOfFile()
+            group.leave()
+        }
+        group.enter()
+        DispatchQueue.global(qos: .utility).async {
+            stderrData = err.fileHandleForReading.readDataToEndOfFile()
+            group.leave()
+        }
+
         try process.run()
         process.waitUntilExit()
-        let stdout = out.fileHandleForReading.readDataToEndOfFile()
-        let stderr = String(data: err.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        group.wait()
+
+        let stderr = String(data: stderrData, encoding: .utf8) ?? ""
         guard process.terminationStatus == 0 else {
             let message = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
             throw BridgeError.requestFailed(
@@ -262,6 +279,6 @@ actor CswapCLIClient: CoreBridgeClientProtocol {
                 message: message.isEmpty ? "cswap exited \(process.terminationStatus)" : message
             )
         }
-        return stdout
+        return stdoutData
     }
 }

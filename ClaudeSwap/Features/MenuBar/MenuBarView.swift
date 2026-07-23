@@ -85,6 +85,11 @@ struct MenuBarView: View {
         }
         .padding(AppSpacing.md)
         .frame(width: 340)
+        .onAppear {
+            // Refresh when the popover opens — avoids hammering `cswap list`
+            // every minute in the background.
+            Task { await appModel.refreshSnapshot(showBusy: false) }
+        }
     }
 
     private var header: some View {

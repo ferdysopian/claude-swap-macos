@@ -20,31 +20,27 @@ struct MenuBarLabel: View {
     @AppStorage("menuBarShowsResetCountdown") private var showsResetCountdown = true
 
     var body: some View {
-        // Recompute every minute so the reset countdown ticks even when the
-        // snapshot itself hasn't changed.
-        TimelineView(.periodic(from: .now, by: 60)) { context in
-            HStack(spacing: 4) {
-                Image(systemName: symbolName)
-                if let text = MenuBarLabelFormatter.displayText(
-                    for: appModel.activeAccount,
-                    showsPercentage: showsPercentage,
-                    showsAccountName: showsAccountName,
-                    showsResetCountdown: showsResetCountdown,
-                    now: context.date
-                ) {
-                    Text(text)
-                }
-            }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Claude Swap")
-            .accessibilityValue(Text(MenuBarLabelFormatter.accessibilityValue(
+        HStack(spacing: 4) {
+            Image(systemName: symbolName)
+            if let text = MenuBarLabelFormatter.displayText(
                 for: appModel.activeAccount,
-                showsPercentage: true,
-                showsAccountName: true,
-                showsResetCountdown: true,
-                now: context.date
-            )))
+                showsPercentage: showsPercentage,
+                showsAccountName: showsAccountName,
+                showsResetCountdown: showsResetCountdown,
+                now: appModel.displayNow
+            ) {
+                Text(text)
+            }
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Claude Swap")
+        .accessibilityValue(Text(MenuBarLabelFormatter.accessibilityValue(
+            for: appModel.activeAccount,
+            showsPercentage: true,
+            showsAccountName: true,
+            showsResetCountdown: true,
+            now: appModel.displayNow
+        )))
     }
 
     /// SF Symbol reflecting the active account's binding-window status, so
