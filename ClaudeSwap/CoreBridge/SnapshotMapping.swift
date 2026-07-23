@@ -43,7 +43,7 @@ enum SnapshotMapping {
                 uptimeSeconds: 0,
                 warnings: warnings
             )
-        )
+        ).enrichingFromUsageCache()
     }
 
     /// Build a UI snapshot from a bridge `snapshot` result dict.
@@ -83,7 +83,7 @@ enum SnapshotMapping {
                 uptimeSeconds: 0,
                 warnings: warnings
             )
-        )
+        ).enrichingFromUsageCache()
     }
 
     // MARK: - Account
@@ -167,20 +167,21 @@ enum SnapshotMapping {
         }
 
         var windows: [UsageWindow] = []
-        if let five = dict["fiveHour"] as? [String: Any] {
+        // JSON list uses camelCase; on-disk lastGood uses snake_case.
+        if let five = (dict["fiveHour"] as? [String: Any]) ?? (dict["five_hour"] as? [String: Any]) {
             windows.append(UsageWindow(
                 id: "5h",
                 label: "5 hour",
                 utilizationPct: doubleValue(five["pct"]) ?? 0,
-                resetsAt: parseDate(five["resetsAt"] as? String)
+                resetsAt: parseDate((five["resetsAt"] as? String) ?? (five["resets_at"] as? String))
             ))
         }
-        if let seven = dict["sevenDay"] as? [String: Any] {
+        if let seven = (dict["sevenDay"] as? [String: Any]) ?? (dict["seven_day"] as? [String: Any]) {
             windows.append(UsageWindow(
                 id: "7d",
                 label: "7 day",
                 utilizationPct: doubleValue(seven["pct"]) ?? 0,
-                resetsAt: parseDate(seven["resetsAt"] as? String)
+                resetsAt: parseDate((seven["resetsAt"] as? String) ?? (seven["resets_at"] as? String))
             ))
         }
         if let scoped = dict["scoped"] as? [[String: Any]] {
@@ -190,7 +191,7 @@ enum SnapshotMapping {
                     id: name,
                     label: name,
                     utilizationPct: doubleValue(entry["pct"]) ?? 0,
-                    resetsAt: parseDate(entry["resetsAt"] as? String)
+                    resetsAt: parseDate((entry["resetsAt"] as? String) ?? (entry["resets_at"] as? String))
                 ))
             }
         }
@@ -265,6 +266,46 @@ enum SnapshotMapping {
         return merged
     }
 
+    /// Fill empty / decision-stale usage from `cache/usage.json` lastGood —
+    /// the same source human `cswap list` shows for inactive accounts.
+    static func enrichingFromUsageCache(
+        _ snapshot: Snapshot,
+        rows: [String: UsageCacheStore.Row]? = nil
+    ) -> Snapshot {
+        let cache = rows ?? UsageCacheStore.loadRows()
+        guard !cache.isEmpty else { return snapshot }
+
+        let hardStatuses: Set<String> = [
+            "Token expired",
+            "Re-login required",
+            "No credentials",
+            "Keychain unavailable",
+            "API key (no usage quota)",
+        ]
+        var enriched = snapshot
+        for index in enriched.accounts.indices {
+            let account = enriched.accounts[index]
+            if !account.usage.windows.isEmpty { continue }
+            if let err = account.usage.lastError, hardStatuses.contains(err) { continue }
+            guard let row = cache[account.id] else { continue }
+            // Slot reuse guard: don't serve a previous account's lastGood.
+            if let cachedEmail = row.email, !cachedEmail.isEmpty, cachedEmail != account.email {
+                continue
+            }
+            let usage = mapUsage(row.lastGood, usageStatus: "ok")
+            guard !usage.windows.isEmpty else { continue }
+            let age = row.fetchedAt.map { UsageCacheStore.formatAge(since: $0) }
+            enriched.accounts[index].usage = UsageSnapshot(
+                windows: usage.windows,
+                unknown: false,
+                lastError: age.map { "Last known · \($0)" }
+                    ?? "Last known — refreshes when this account is active",
+                isStale: true
+            )
+        }
+        return enriched
+    }
+
     static func mapAutoSwitch(_ raw: [String: Any]) -> AutoSwitchState {
         let strategyRaw = (raw["strategy"] as? String) ?? "best"
         let strategy: AutoSwitchStrategy = strategyRaw == "consumeFirst" || strategyRaw == "consume-first"
@@ -314,5 +355,13 @@ enum SnapshotMapping {
         let fractional = ISO8601DateFormatter()
         fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return fractional.date(from: raw)
+    }
+}
+
+extension Snapshot {
+    func enrichingFromUsageCache(
+        rows: [String: UsageCacheStore.Row]? = nil
+    ) -> Snapshot {
+        SnapshotMapping.enrichingFromUsageCache(self, rows: rows)
     }
 }

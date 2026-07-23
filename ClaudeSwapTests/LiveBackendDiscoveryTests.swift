@@ -143,6 +143,89 @@ struct LiveBackendDiscoveryTests {
         #expect(merged.accounts[1].usage.lastError?.contains("Last known") == true)
     }
 
+    @Test func enrichesUnavailableAccountFromUsageCacheLastGood() {
+        let json = """
+        {
+          "schemaVersion": 1,
+          "activeAccountNumber": 2,
+          "accounts": [
+            {
+              "number": 1,
+              "email": "user1@example.com",
+              "organizationName": "Acme",
+              "organizationUuid": "org-1",
+              "active": false,
+              "usageStatus": "unavailable",
+              "usage": null
+            },
+            {
+              "number": 2,
+              "email": "user2@example.com",
+              "organizationName": "Globex",
+              "organizationUuid": "org-2",
+              "active": true,
+              "usageStatus": "ok",
+              "usage": {
+                "fiveHour": { "pct": 23.0, "resetsAt": "2026-07-22T19:19:59Z" },
+                "sevenDay": { "pct": 9.0, "resetsAt": "2026-07-28T19:59:59Z" }
+              }
+            }
+          ]
+        }
+        """.data(using: .utf8)!
+
+        let payload = try! SnapshotMapping.jsonObject(from: json)
+        // Skip disk; inject cache rows matching human `cswap list` lastGood.
+        let base = SnapshotMapping.fromListPayload(
+            payload,
+            coreVersion: "cswap",
+            corePath: nil
+        )
+        // fromListPayload already tried disk; force a known cache overlay:
+        let stripped = Snapshot(
+            protocolVersion: base.protocolVersion,
+            generatedAt: base.generatedAt,
+            activeAccountId: base.activeAccountId,
+            accounts: base.accounts.map { account in
+                var copy = account
+                if account.id == "1" {
+                    copy.usage = UsageSnapshot(windows: [], unknown: true, lastError: "Not refreshed yet")
+                }
+                return copy
+            },
+            autoSwitch: base.autoSwitch,
+            capabilities: base.capabilities,
+            diagnostics: base.diagnostics
+        )
+        let fetchedAt = Date().addingTimeInterval(-10 * 3600)
+        let enriched = SnapshotMapping.enrichingFromUsageCache(stripped, rows: [
+            "1": .init(
+                email: "user1@example.com",
+                organizationUuid: "org-1",
+                fetchedAt: fetchedAt,
+                lastGood: [
+                    "five_hour": ["pct": 0.0],
+                    "seven_day": [
+                        "pct": 100.0,
+                        "resets_at": "2026-07-23T18:59:59Z",
+                    ],
+                    "scoped": [
+                        ["name": "Fable", "pct": 66.0, "resets_at": "2026-07-23T18:59:59Z"],
+                    ],
+                ]
+            ),
+        ])
+
+        #expect(enriched.accounts[0].usage.isStale == true)
+        #expect(enriched.accounts[0].usage.unknown == false)
+        #expect(enriched.accounts[0].usage.windows.count == 3)
+        #expect(enriched.accounts[0].usage.windows.first(where: { $0.id == "7d" })?.utilizationPct == 100)
+        #expect(enriched.accounts[0].usage.windows.first(where: { $0.id == "Fable" })?.utilizationPct == 66)
+        #expect(enriched.accounts[0].usage.lastError?.contains("Last known") == true)
+        #expect(enriched.accounts[1].usage.isStale == false)
+        #expect(enriched.accounts[1].usage.windows.first?.utilizationPct == 23)
+    }
+
     @Test func resolveBackendFindsInstalledCswapWhenPresent() {
         // On this machine `cswap` lives under ~/.local/bin — GUI PATH may omit
         // it, but HelperLocator always searches that directory.

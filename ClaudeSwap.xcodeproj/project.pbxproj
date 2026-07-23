@@ -21,6 +21,7 @@
 		53DC0E0B3CA5AAD735E793AC /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D58FAA2FEA0A98766CB5462 /* AppModel.swift */; };
 		5846B506462366563C5109AF /* ClaudeSwapUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD6B0C0D6F91AA7E6B57082F /* ClaudeSwapUITests.swift */; };
 		5F7C17D78C3968EE442C9269 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 863F7DA4788A736E2BF8638F /* SettingsView.swift */; };
+		5F83F61B90FC7DC135F1BB58 /* UsageCacheStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90E75AC8ACB52200B2B4C66F /* UsageCacheStore.swift */; };
 		625C0B4AB2F257938AA8F77E /* AppSpacing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16492BC9F53890FE8AAE367E /* AppSpacing.swift */; };
 		62A6524CCC894CE2550BEC9A /* ClaudeSwapApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FA1C73A2ECB20E27AC8D70C /* ClaudeSwapApp.swift */; };
 		6986C7617C12BCB85BB77D6E /* CardStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 928ADE12F965E23C3E37AB4C /* CardStyle.swift */; };
@@ -107,6 +108,7 @@
 		87DD247A471F8E3EB5BE1106 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		8854F11B8707C10C589458D4 /* ActivityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityView.swift; sourceTree = "<group>"; };
 		8AC658D7F6007D51A8B365D3 /* BridgeProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BridgeProtocol.swift; sourceTree = "<group>"; };
+		90E75AC8ACB52200B2B4C66F /* UsageCacheStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageCacheStore.swift; sourceTree = "<group>"; };
 		928ADE12F965E23C3E37AB4C /* CardStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardStyle.swift; sourceTree = "<group>"; };
 		929A54AC09142AC1A9D5EAD4 /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
 		9B81DBB2E205332B08244F8D /* BridgeModelDecodingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BridgeModelDecodingTests.swift; sourceTree = "<group>"; };
@@ -250,6 +252,7 @@
 				5F9B38C2C8F970E6C3447612 /* CoreBridgeClientProtocol.swift */,
 				6B5A84614F66B8BF14B4D52A /* CswapCLIClient.swift */,
 				29FFE039C2B6B9D99BE89443 /* SnapshotMapping.swift */,
+				90E75AC8ACB52200B2B4C66F /* UsageCacheStore.swift */,
 			);
 			path = CoreBridge;
 			sourceTree = "<group>";
@@ -529,6 +532,7 @@
 				BFF4BC5D7F186C77B0951BD5 /* StatusBadge.swift in Sources */,
 				A8CE8E90B53624341FE73B8D /* ToolsView.swift in Sources */,
 				CA1B584ACB7B9CC92D09E307 /* UpdateService.swift in Sources */,
+				5F83F61B90FC7DC135F1BB58 /* UsageCacheStore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
