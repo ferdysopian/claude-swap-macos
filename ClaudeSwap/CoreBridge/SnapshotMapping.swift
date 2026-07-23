@@ -135,10 +135,14 @@ enum SnapshotMapping {
     }
 
     static func mapUsage(_ raw: Any?, usageStatus: String?) -> UsageSnapshot {
+        let statusNote = Self.usageStatusNote(usageStatus)
         guard let dict = raw as? [String: Any] else {
             let unknown = usageStatus != "ok"
-            let error = unknown ? (usageStatus ?? "unavailable") : nil
-            return UsageSnapshot(windows: [], unknown: unknown || usageStatus == "unavailable", lastError: error)
+            return UsageSnapshot(
+                windows: [],
+                unknown: unknown || usageStatus == "unavailable",
+                lastError: unknown ? statusNote : nil
+            )
         }
 
         // Already UI-shaped?
@@ -157,7 +161,8 @@ enum SnapshotMapping {
             return UsageSnapshot(
                 windows: windows,
                 unknown: (dict["unknown"] as? Bool) ?? false,
-                lastError: dict["lastError"] as? String
+                lastError: dict["lastError"] as? String,
+                isStale: (dict["isStale"] as? Bool) ?? false
             )
         }
 
@@ -194,8 +199,70 @@ enum SnapshotMapping {
         return UsageSnapshot(
             windows: windows,
             unknown: unknown,
-            lastError: unknown ? (usageStatus ?? "unavailable") : nil
+            lastError: unknown ? statusNote : nil
         )
+    }
+
+    /// Human-readable note for `cswap list --json` usageStatus values.
+    static func usageStatusNote(_ status: String?) -> String {
+        switch status {
+        case nil, "unavailable":
+            // Core JSON omits last-good once age > STALE_OK_S (~5m). Inactive
+            // accounts commonly land here even though human `cswap list` still
+            // shows the cached numbers.
+            return "Not refreshed yet"
+        case "ok":
+            return "ok"
+        case "token_expired":
+            return "Token expired"
+        case "relogin_required":
+            return "Re-login required"
+        case "no_credentials":
+            return "No credentials"
+        case "keychain_unavailable":
+            return "Keychain unavailable"
+        case "api_key":
+            return "API key (no usage quota)"
+        default:
+            return status ?? "Not refreshed yet"
+        }
+    }
+
+    /// Keep last-known usage bars when a refresh returns decision-stale
+    /// `unavailable` / null usage (common for inactive accounts). Hard auth
+    /// failures still clear the bars.
+    static func mergingPreservedUsage(previous: Snapshot, next: Snapshot) -> Snapshot {
+        let hardStatuses: Set<String> = [
+            "Token expired",
+            "Re-login required",
+            "No credentials",
+            "Keychain unavailable",
+            "API key (no usage quota)",
+            "token_expired",
+            "relogin_required",
+            "no_credentials",
+            "keychain_unavailable",
+            "api_key",
+        ]
+        let previousById = Dictionary(uniqueKeysWithValues: previous.accounts.map { ($0.id, $0) })
+        var merged = next
+        for index in merged.accounts.indices {
+            let account = merged.accounts[index]
+            if let err = account.usage.lastError, hardStatuses.contains(err) {
+                continue
+            }
+            let softMiss = account.usage.windows.isEmpty
+            guard softMiss, let prior = previousById[account.id], !prior.usage.windows.isEmpty else {
+                continue
+            }
+            merged.accounts[index].usage = UsageSnapshot(
+                windows: prior.usage.windows,
+                unknown: false,
+                lastError: "Last known — refreshes when this account is active",
+                isStale: true
+            )
+        }
+        return merged
     }
 
     static func mapAutoSwitch(_ raw: [String: Any]) -> AutoSwitchState {

@@ -242,7 +242,7 @@ final class AppModel {
     private func handle(_ event: BridgeEvent) async {
         switch event {
         case .snapshotChanged(let snapshot):
-            self.snapshot = snapshot
+            applySnapshot(snapshot)
         case .switched(let from, let to, let trigger):
             let name = snapshot.accounts.first(where: { $0.id == to })?.displayName ?? to
             record(.switched, "Switched to \(name)" + (trigger == "manual" ? "" : " (\(trigger))"))
@@ -277,21 +277,24 @@ final class AppModel {
 
     // MARK: - Snapshot
 
+    /// Apply a bridge/CLI snapshot, keeping last-known usage for accounts the
+    /// core marked decision-stale (`usageStatus: unavailable`).
+    private func applySnapshot(_ next: Snapshot) {
+        snapshot = SnapshotMapping.mergingPreservedUsage(previous: snapshot, next: next)
+        displayNow = Date()
+    }
+
     func refreshSnapshot(showBusy: Bool = true) async {
         if showBusy {
             await run { [bridge] in try await bridge.requestSnapshot() }
-            displayNow = Date()
             return
         }
         guard !quietRefreshInFlight, !isBusy else { return }
         quietRefreshInFlight = true
         defer { quietRefreshInFlight = false }
         do {
-            // Assign once here; ignore the mirrored `.snapshotChanged` event
-            // if the bridge also broadcasts — same value, no extra work.
             let next = try await bridge.requestSnapshot()
-            snapshot = next
-            displayNow = Date()
+            applySnapshot(next)
         } catch {
             // Keep the last good snapshot; don't overwrite a user-visible
             // error banner with a transient background-poll failure.
@@ -384,7 +387,7 @@ final class AppModel {
         isBusy = true
         defer { isBusy = false }
         do {
-            snapshot = try await operation()
+            applySnapshot(try await operation())
             errorBanner = nil
             return true
         } catch {

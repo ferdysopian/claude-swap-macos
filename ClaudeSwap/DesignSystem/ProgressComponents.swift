@@ -106,22 +106,31 @@ struct AccountUsageChips: View {
                 .foregroundStyle(AppColors.textTertiary)
                 .lineLimit(1)
         } else {
-            HStack(spacing: AppSpacing.xs) {
-                ForEach(account.usage.windows) { window in
-                    HStack(spacing: 2) {
-                        Text(shortLabel(for: window))
-                            .foregroundStyle(AppColors.textTertiary)
-                        Text(String(format: "%.0f%%", window.utilizationPct))
-                            .foregroundStyle(AppColors.status(window.status))
-                            .fontWeight(.semibold)
-                        if let countdown = UsageCountdown.compact(until: window.resetsAt, now: now) {
-                            Text(countdown)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: AppSpacing.xs) {
+                    ForEach(account.usage.windows) { window in
+                        HStack(spacing: 2) {
+                            Text(shortLabel(for: window))
                                 .foregroundStyle(AppColors.textTertiary)
+                            Text(String(format: "%.0f%%", window.utilizationPct))
+                                .foregroundStyle(AppColors.status(window.status))
+                                .fontWeight(.semibold)
+                            if !account.usage.isStale,
+                               let countdown = UsageCountdown.compact(until: window.resetsAt, now: now) {
+                                Text(countdown)
+                                    .foregroundStyle(AppColors.textTertiary)
+                            }
                         }
+                        .font(AppTypography.caption)
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel(accessibilityLabel(for: window, now: now))
                     }
-                    .font(AppTypography.caption)
-                    .accessibilityElement(children: .combine)
-                    .accessibilityLabel(accessibilityLabel(for: window, now: now))
+                }
+                if account.usage.isStale, let note = account.usage.lastError {
+                    Text(note)
+                        .font(AppTypography.caption)
+                        .foregroundStyle(AppColors.textTertiary)
+                        .lineLimit(1)
                 }
             }
         }
@@ -160,8 +169,13 @@ struct AccountUsageOverview: View {
             .foregroundStyle(AppColors.textSecondary)
         } else {
             VStack(alignment: .leading, spacing: AppSpacing.sm) {
+                if account.usage.isStale, let note = account.usage.lastError {
+                    Text(note)
+                        .font(AppTypography.caption)
+                        .foregroundStyle(AppColors.textTertiary)
+                }
                 ForEach(account.usage.windows) { window in
-                    UsageWindowBar(window: window, showsResetTime: showsResetTime)
+                    UsageWindowBar(window: window, showsResetTime: showsResetTime && !account.usage.isStale)
                 }
             }
         }

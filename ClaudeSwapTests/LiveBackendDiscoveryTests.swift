@@ -51,11 +51,96 @@ struct LiveBackendDiscoveryTests {
         #expect(snapshot.accounts.count == 2)
         #expect(snapshot.accounts[0].displayName == "Acme")
         #expect(snapshot.accounts[0].usage.unknown == true)
+        #expect(snapshot.accounts[0].usage.lastError == "Not refreshed yet")
         #expect(snapshot.accounts[1].displayName == "Globex")
         #expect(snapshot.accounts[1].isActive == true)
         #expect(snapshot.accounts[1].usage.windows.count == 3)
         #expect(snapshot.accounts[1].usage.windows.first?.utilizationPct == 22)
         #expect(snapshot.accounts[1].usage.windows.contains(where: { $0.id == "Fable" }))
+    }
+
+    @Test func preservesLastKnownUsageWhenJsonMarksInactiveUnavailable() throws {
+        let freshJSON = """
+        {
+          "schemaVersion": 1,
+          "activeAccountNumber": 1,
+          "accounts": [
+            {
+              "number": 1,
+              "email": "a@example.com",
+              "organizationName": "A",
+              "organizationUuid": "org-a",
+              "active": true,
+              "usageStatus": "ok",
+              "usage": {
+                "fiveHour": { "pct": 40.0, "resetsAt": "2026-07-22T19:19:59Z" },
+                "sevenDay": { "pct": 10.0, "resetsAt": "2026-07-28T19:59:59Z" }
+              }
+            },
+            {
+              "number": 2,
+              "email": "b@example.com",
+              "organizationName": "B",
+              "organizationUuid": "org-b",
+              "active": false,
+              "usageStatus": "ok",
+              "usage": {
+                "fiveHour": { "pct": 88.0, "resetsAt": "2026-07-22T18:00:00Z" },
+                "sevenDay": { "pct": 50.0, "resetsAt": "2026-07-27T00:00:00Z" }
+              }
+            }
+          ]
+        }
+        """.data(using: .utf8)!
+
+        let staleJSON = """
+        {
+          "schemaVersion": 1,
+          "activeAccountNumber": 1,
+          "accounts": [
+            {
+              "number": 1,
+              "email": "a@example.com",
+              "organizationName": "A",
+              "organizationUuid": "org-a",
+              "active": true,
+              "usageStatus": "ok",
+              "usage": {
+                "fiveHour": { "pct": 41.0, "resetsAt": "2026-07-22T19:19:59Z" },
+                "sevenDay": { "pct": 10.0, "resetsAt": "2026-07-28T19:59:59Z" }
+              }
+            },
+            {
+              "number": 2,
+              "email": "b@example.com",
+              "organizationName": "B",
+              "organizationUuid": "org-b",
+              "active": false,
+              "usageStatus": "unavailable",
+              "usage": null
+            }
+          ]
+        }
+        """.data(using: .utf8)!
+
+        let previous = SnapshotMapping.fromListPayload(
+            try SnapshotMapping.jsonObject(from: freshJSON),
+            coreVersion: "cswap",
+            corePath: nil
+        )
+        let next = SnapshotMapping.fromListPayload(
+            try SnapshotMapping.jsonObject(from: staleJSON),
+            coreVersion: "cswap",
+            corePath: nil
+        )
+        let merged = SnapshotMapping.mergingPreservedUsage(previous: previous, next: next)
+
+        #expect(merged.accounts[0].usage.windows.first?.utilizationPct == 41)
+        #expect(merged.accounts[0].usage.isStale == false)
+        #expect(merged.accounts[1].usage.isStale == true)
+        #expect(merged.accounts[1].usage.unknown == false)
+        #expect(merged.accounts[1].usage.windows.first?.utilizationPct == 88)
+        #expect(merged.accounts[1].usage.lastError?.contains("Last known") == true)
     }
 
     @Test func resolveBackendFindsInstalledCswapWhenPresent() {

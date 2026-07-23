@@ -75,6 +75,11 @@ struct UsageSnapshot: Codable, Sendable, Equatable {
     /// token expired, etc.) — bars should render as "unknown", not 0%.
     var unknown: Bool
     var lastError: String?
+    /// True when bars are retained from a previous fresh fetch because the
+    /// core's JSON list only serves decision-fresh usage (≤ ~5 minutes).
+    /// Inactive accounts often fall into this state — matching `cswap list`
+    /// human output, which still shows last-known numbers with an age note.
+    var isStale: Bool
 
     /// The window with the highest utilization ("binding" window) — the one
     /// that determines whether the account is near a limit.
@@ -82,7 +87,27 @@ struct UsageSnapshot: Codable, Sendable, Equatable {
         windows.max(by: { $0.utilizationPct < $1.utilizationPct })
     }
 
-    static let empty = UsageSnapshot(windows: [], unknown: true, lastError: nil)
+    init(
+        windows: [UsageWindow],
+        unknown: Bool,
+        lastError: String? = nil,
+        isStale: Bool = false
+    ) {
+        self.windows = windows
+        self.unknown = unknown
+        self.lastError = lastError
+        self.isStale = isStale
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        windows = try container.decode([UsageWindow].self, forKey: .windows)
+        unknown = try container.decode(Bool.self, forKey: .unknown)
+        lastError = try container.decodeIfPresent(String.self, forKey: .lastError)
+        isStale = try container.decodeIfPresent(Bool.self, forKey: .isStale) ?? false
+    }
+
+    static let empty = UsageSnapshot(windows: [], unknown: true, lastError: nil, isStale: false)
 }
 
 /// One rolling usage window (e.g. "5h", "7d", or a model-scoped name).
