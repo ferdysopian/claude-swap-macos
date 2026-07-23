@@ -351,10 +351,11 @@ enum SnapshotMapping {
 
     private static func parseDate(_ raw: String?) -> Date? {
         guard let raw, !raw.isEmpty else { return nil }
-        if let d = ISO8601DateFormatter().date(from: raw) { return d }
+        // Prefer fractional first — usage cache writes `…59.912942+00:00`.
         let fractional = ISO8601DateFormatter()
         fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return fractional.date(from: raw)
+        if let d = fractional.date(from: raw) { return d }
+        return ISO8601DateFormatter().date(from: raw)
     }
 }
 

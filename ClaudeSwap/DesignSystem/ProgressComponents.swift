@@ -115,8 +115,7 @@ struct AccountUsageChips: View {
                             Text(String(format: "%.0f%%", window.utilizationPct))
                                 .foregroundStyle(AppColors.status(window.status))
                                 .fontWeight(.semibold)
-                            if !account.usage.isStale,
-                               let countdown = UsageCountdown.compact(until: window.resetsAt, now: now) {
+                            if let countdown = UsageCountdown.compact(until: window.resetsAt, now: now) {
                                 Text(countdown)
                                     .foregroundStyle(AppColors.textTertiary)
                             }
@@ -175,7 +174,7 @@ struct AccountUsageOverview: View {
                         .foregroundStyle(AppColors.textTertiary)
                 }
                 ForEach(account.usage.windows) { window in
-                    UsageWindowBar(window: window, showsResetTime: showsResetTime && !account.usage.isStale)
+                    UsageWindowBar(window: window, showsResetTime: showsResetTime)
                 }
             }
         }
