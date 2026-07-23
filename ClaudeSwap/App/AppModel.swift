@@ -114,7 +114,12 @@ final class AppModel {
 
     let bridge: any CoreBridgeClientProtocol
     private var eventTask: Task<Void, Never>?
+    private var pollTask: Task<Void, Never>?
     private let usingFixture: Bool
+
+    /// How often to re-fetch usage from the core/CLI so percentages and
+    /// `resetsAt` stay current without a manual refresh.
+    private static let snapshotPollInterval: Duration = .seconds(60)
 
     private enum Keys {
         static let onboarded = "hasCompletedOnboarding"
@@ -172,6 +177,7 @@ final class AppModel {
             }
 
             await self.refreshSnapshot()
+            self.startPolling()
             // If refresh failed, run() already set errorBanner; still stay
             // connected so the UI isn't stuck on "Connecting…".
             for await event in events {
@@ -183,8 +189,27 @@ final class AppModel {
     func stop() {
         eventTask?.cancel()
         eventTask = nil
+        pollTask?.cancel()
+        pollTask = nil
         let bridge = self.bridge
         Task { await bridge.stop() }
+    }
+
+    /// Quiet background poll — keeps limit % / resetsAt fresh without
+    /// flashing the busy spinner on every tick.
+    private func startPolling() {
+        guard pollTask == nil else { return }
+        pollTask = Task { [weak self] in
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(for: Self.snapshotPollInterval)
+                } catch {
+                    return
+                }
+                guard let self, !Task.isCancelled else { return }
+                await self.refreshSnapshot(showBusy: false)
+            }
+        }
     }
 
     private func handle(_ event: BridgeEvent) async {
@@ -225,8 +250,17 @@ final class AppModel {
 
     // MARK: - Snapshot
 
-    func refreshSnapshot() async {
-        await run { [bridge] in try await bridge.requestSnapshot() }
+    func refreshSnapshot(showBusy: Bool = true) async {
+        if showBusy {
+            await run { [bridge] in try await bridge.requestSnapshot() }
+            return
+        }
+        do {
+            snapshot = try await bridge.requestSnapshot()
+        } catch {
+            // Keep the last good snapshot; don't overwrite a user-visible
+            // error banner with a transient background-poll failure.
+        }
     }
 
     // MARK: - Account actions
