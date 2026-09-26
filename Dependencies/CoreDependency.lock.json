@@ -2,11 +2,11 @@
   "$schema": "./CoreDependency.schema.json",
   "description": "Pins the exact claude-swap (Python core) revision that this macOS app bundles as a helper process. Edit only via scripts/update-core.sh — do not hand-edit commitSha/tag together, they must refer to the same revision.",
   "repository": "https://github.com/realiti4/claude-swap",
-  "tag": "v0.22.0",
-  "commitSha": "0f817dd5033e60f1269d3d13baac3381629f2537",
-  "pythonPackageVersion": "0.22.0",
+  "tag": "v0.26.0",
+  "commitSha": "0d2176df74fcf3241c7c2ff952d56261ec7c6cfc",
+  "pythonPackageVersion": "0.26.0",
   "bridgeProtocolVersion": 1,
-  "helperBuildVersion": 0,
+  "helperBuildVersion": 1,
   "helper": {
     "binaryName": "claude-swap-helper",
     "bundleLocation": "Contents/MacOS/claude-swap-helper",
@@ -21,6 +21,6 @@
     "path": "/path/to/claude-swap",
     "note": "Absolute path to a sibling checkout of claude-swap used instead of fetching repository@tag/commitSha during local development. If this path does not exist on the current machine, scripts fall back to '<parent-of-repo-root>/claude-swap' (i.e. a sibling of this checkout) before giving up and requiring a real pin. Set enabled=false for CI/release builds so the pinned commitSha is used instead."
   },
-  "updatedAt": "2026-07-22T19:00:00Z",
-  "updatedBy": "manual-pin-realiti4-v0.22.0"
+  "updatedAt": "2026-09-26T02:38:18Z",
+  "updatedBy": "scripts/update-core.sh"
 }
