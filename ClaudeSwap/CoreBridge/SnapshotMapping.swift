@@ -17,7 +17,8 @@ enum SnapshotMapping {
         _ payload: [String: Any],
         coreVersion: String,
         corePath: String?,
-        warnings: [String] = []
+        warnings: [String] = [],
+        autoSwitch: AutoSwitchState = .disabled
     ) -> Snapshot {
         let accountsRaw = payload["accounts"] as? [[String: Any]] ?? []
         let activeNumber = payload["activeAccountNumber"] as? Int
@@ -30,7 +31,7 @@ enum SnapshotMapping {
             generatedAt: Date(),
             activeAccountId: activeId,
             accounts: accounts,
-            autoSwitch: .disabled,
+            autoSwitch: autoSwitch,
             capabilities: Capabilities(
                 supportsAutoSwitch: true,
                 supportsAPIKeyAccounts: true,
@@ -324,6 +325,37 @@ enum SnapshotMapping {
             lastSwitchAt: parseDate(raw["lastSwitchAt"] as? String),
             lastEventDescription: raw["lastEventDescription"] as? String
                 ?? raw["lastSwitchTo"] as? String
+        )
+    }
+
+    /// Flatten `cswap config list --json`
+    /// (`{"settings":[{"key":"autoswitch.threshold","value":95.0,"isSet":true}, ...]}`)
+    /// into a key → value dict.
+    static func configValues(fromConfigList payload: [String: Any]) -> [String: Any] {
+        let entries = (payload["settings"] as? [[String: Any]]) ?? []
+        var values: [String: Any] = [:]
+        for entry in entries {
+            if let key = entry["key"] as? String {
+                values[key] = entry["value"]
+            }
+        }
+        return values
+    }
+
+    /// Auto-switch state for the CLI backend. `enabled` comes from whether
+    /// the LaunchAgent is actually loaded — settings.json has no enabled
+    /// flag, and a stray `autoswitch.enabled` entry is ignored.
+    static func autoSwitchState(configValues values: [String: Any], daemonRunning: Bool) -> AutoSwitchState {
+        let strategyRaw = (values["autoswitch.strategy"] as? String) ?? "best"
+        return AutoSwitchState(
+            enabled: daemonRunning,
+            strategy: strategyRaw == "consumeFirst" || strategyRaw == "consume-first" ? .consumeFirst : .best,
+            thresholdPct: doubleValue(values["autoswitch.threshold"]) ?? AutoSwitchState.disabled.thresholdPct,
+            cooldownSeconds: doubleValue(values["autoswitch.cooldownSeconds"]).map { Int($0) }
+                ?? AutoSwitchState.disabled.cooldownSeconds,
+            includeAPIKeyAccounts: (values["autoswitch.includeApiKeyAccounts"] as? Bool) ?? false,
+            lastSwitchAt: nil,
+            lastEventDescription: nil
         )
     }
 

@@ -80,10 +80,16 @@ actor CswapCLIClient: CoreBridgeClientProtocol {
         let data = try await run(arguments: ["list", "--json"])
         let payload = try SnapshotMapping.jsonObject(from: data)
         let version = try? await runString(arguments: ["--version"])
+        let configValues = (try? await configListValues()) ?? [:]
+        let autoSwitch = SnapshotMapping.autoSwitchState(
+            configValues: configValues,
+            daemonRunning: AutoSwitchDaemonService.isRunning()
+        )
         let snapshot = SnapshotMapping.fromListPayload(
             payload,
             coreVersion: version?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "cswap",
-            corePath: cswapURL.path
+            corePath: cswapURL.path,
+            autoSwitch: autoSwitch
         )
         latest = snapshot
         broadcast(.snapshotChanged(snapshot))
@@ -104,13 +110,26 @@ actor CswapCLIClient: CoreBridgeClientProtocol {
         return try await requestSnapshot()
     }
 
+    /// `cswap auto` is a foreground polling loop, and settings.json has no
+    /// "enabled" key (`cswap config set autoswitch.enabled` is rejected).
+    /// This installs/removes a per-user LaunchAgent
+    /// (`AutoSwitchDaemonService`) so the toggle actually runs the engine
+    /// continuously, independent of whether this app stays open. The
+    /// LaunchAgent's presence is the only on/off state.
     @discardableResult
     func setAutoSwitchEnabled(_ enabled: Bool) async throws -> Snapshot {
         if enabled {
-            // Start is long-running in CLI; toggle the setting only.
-            _ = try? await run(arguments: ["config", "set", "autoswitch.enabled", enabled ? "true" : "false"])
+            let settings = try? await currentAutoSwitchSettings()
+            try AutoSwitchDaemonService.start(
+                cswapPath: cswapURL.path,
+                thresholdPct: settings?.threshold ?? 90.0,
+                intervalSeconds: settings?.interval ?? 60.0,
+                cooldownSeconds: settings?.cooldown ?? 300.0,
+                strategy: settings?.strategy ?? "best",
+                includeAPIKeyAccounts: settings?.includeAPIKeyAccounts ?? false
+            )
         } else {
-            _ = try? await run(arguments: ["config", "set", "autoswitch.enabled", "false"])
+            AutoSwitchDaemonService.stop()
         }
         return try await requestSnapshot()
     }
@@ -118,7 +137,12 @@ actor CswapCLIClient: CoreBridgeClientProtocol {
     @discardableResult
     func updateAutoSwitchSettings(_ update: AutoSwitchSettingsUpdate) async throws -> Snapshot {
         if let threshold = update.thresholdPct {
-            _ = try? await run(arguments: ["config", "set", "autoswitch.threshold", String(Int(threshold))])
+            _ = try? await run(arguments: ["config", "set", "autoswitch.threshold", String(threshold)])
+        }
+        if let strategy = update.strategy {
+            _ = try? await run(arguments: [
+                "config", "set", "autoswitch.strategy", strategy == .consumeFirst ? "consume-first" : "best",
+            ])
         }
         if let cooldown = update.cooldownSeconds {
             _ = try? await run(arguments: ["config", "set", "autoswitch.cooldownSeconds", String(cooldown)])
@@ -128,7 +152,53 @@ actor CswapCLIClient: CoreBridgeClientProtocol {
                 "config", "set", "autoswitch.includeApiKeyAccounts", include ? "true" : "false",
             ])
         }
+        // Reload the daemon with fresh arguments if it's already running,
+        // so a settings change (e.g. lowering the threshold) takes effect
+        // immediately instead of waiting for the next manual toggle.
+        if AutoSwitchDaemonService.isRunning() {
+            if let settings = try? await currentAutoSwitchSettings() {
+                try? AutoSwitchDaemonService.start(
+                    cswapPath: cswapURL.path,
+                    thresholdPct: settings.threshold,
+                    intervalSeconds: settings.interval,
+                    cooldownSeconds: settings.cooldown,
+                    strategy: settings.strategy,
+                    includeAPIKeyAccounts: settings.includeAPIKeyAccounts
+                )
+            }
+        }
         return try await requestSnapshot()
+    }
+
+    private struct CurrentAutoSwitchSettings {
+        let threshold: Double
+        let interval: Double
+        let cooldown: Double
+        let strategy: String
+        let includeAPIKeyAccounts: Bool
+    }
+
+    /// `cswap config list --json` returns
+    /// {"schemaVersion":1,"path":"...","settings":[{"key":"autoswitch.threshold","value":95.0,"isSet":true}, ...]}
+    /// — a keyed array, not a flat dict.
+    private func configListValues() async throws -> [String: Any] {
+        let data = try await run(arguments: ["config", "list", "--json"])
+        let payload = (try? SnapshotMapping.jsonObject(from: data)) ?? [:]
+        return SnapshotMapping.configValues(fromConfigList: payload)
+    }
+
+    private func currentAutoSwitchSettings() async throws -> CurrentAutoSwitchSettings {
+        let values = try await configListValues()
+        func num(_ key: String, _ fallback: Double) -> Double {
+            (values[key] as? NSNumber)?.doubleValue ?? fallback
+        }
+        return CurrentAutoSwitchSettings(
+            threshold: num("autoswitch.threshold", 90.0),
+            interval: num("autoswitch.intervalSeconds", 60.0),
+            cooldown: num("autoswitch.cooldownSeconds", 300.0),
+            strategy: (values["autoswitch.strategy"] as? String) ?? "best",
+            includeAPIKeyAccounts: (values["autoswitch.includeApiKeyAccounts"] as? Bool) ?? false
+        )
     }
 
     @discardableResult

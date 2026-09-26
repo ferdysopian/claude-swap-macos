@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A1D5E0C0AB5E4D0C8F1A2B01 /* AutoSwitchDaemonService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D5E0C0AB5E4D0C8F1A2B02 /* AutoSwitchDaemonService.swift */; };
 		02E9E399122490E203107E7F /* DiagnosticsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A3F7192ABD549A31E38DFFF /* DiagnosticsService.swift */; };
 		034D8A8152EAF3862AE6A481 /* fixture_snapshot.json in Resources */ = {isa = PBXBuildFile; fileRef = BBE665BB158CD24AE843E1E8 /* fixture_snapshot.json */; };
 		0970D23B934FC212C758B5D1 /* BridgeFixtureClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 338C55EF7DC974BE7F3F193A /* BridgeFixtureClient.swift */; };
@@ -46,6 +47,7 @@
 		C2FAC8A6A06610B42CAB1931 /* AccountsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80C783D4ABA8721E9154FFD2 /* AccountsView.swift */; };
 		CA1B584ACB7B9CC92D09E307 /* UpdateService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9DB04E759B4B5CA033CC2DC /* UpdateService.swift */; };
 		CB2222822548DF65086851CB /* Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 36D387AF64DAD6ACC547C623 /* Info.plist */; };
+		A1D5E0C0AB5E4D0C8F1A2B03 /* AutoSwitchStateMappingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D5E0C0AB5E4D0C8F1A2B04 /* AutoSwitchStateMappingTests.swift */; };
 		D437A3F8B759AF8FE7FF6AB4 /* BridgeErrorMappingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 759B52B346EC9CACFBBD0602 /* BridgeErrorMappingTests.swift */; };
 		DAB1A46C7B8D43E3420005F3 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 929A54AC09142AC1A9D5EAD4 /* AppTheme.swift */; };
 		DF3719329281E489369B95AA /* snapshot_exhausted.json in Resources */ = {isa = PBXBuildFile; fileRef = CBF2AA3DD5FD2EAF35DF017F /* snapshot_exhausted.json */; };
@@ -88,6 +90,7 @@
 		3256A27C116257290A3FB9F8 /* BridgeModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BridgeModels.swift; sourceTree = "<group>"; };
 		338C55EF7DC974BE7F3F193A /* BridgeFixtureClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BridgeFixtureClient.swift; sourceTree = "<group>"; };
 		36D387AF64DAD6ACC547C623 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		A1D5E0C0AB5E4D0C8F1A2B02 /* AutoSwitchDaemonService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoSwitchDaemonService.swift; sourceTree = "<group>"; };
 		3A3F7192ABD549A31E38DFFF /* DiagnosticsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsService.swift; sourceTree = "<group>"; };
 		3F61E8AF33DA493C744C1243 /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
 		3FA1C73A2ECB20E27AC8D70C /* ClaudeSwapApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeSwapApp.swift; sourceTree = "<group>"; };
@@ -99,6 +102,7 @@
 		6A26D3B8CBD4F169135743A6 /* CoreBridgeClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreBridgeClient.swift; sourceTree = "<group>"; };
 		6B5A84614F66B8BF14B4D52A /* CswapCLIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CswapCLIClient.swift; sourceTree = "<group>"; };
 		74902AE1E80A8CC203613C0C /* MenuBarLabelFormattingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarLabelFormattingTests.swift; sourceTree = "<group>"; };
+		A1D5E0C0AB5E4D0C8F1A2B04 /* AutoSwitchStateMappingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoSwitchStateMappingTests.swift; sourceTree = "<group>"; };
 		759B52B346EC9CACFBBD0602 /* BridgeErrorMappingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BridgeErrorMappingTests.swift; sourceTree = "<group>"; };
 		769908E3E357204847322FEF /* AddAccountSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddAccountSheet.swift; sourceTree = "<group>"; };
 		7BAE25654E91D454F50B5811 /* BridgeError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BridgeError.swift; sourceTree = "<group>"; };
@@ -154,6 +158,7 @@
 		14BB86E826E1FFA2DCCD5211 /* ClaudeSwapTests */ = {
 			isa = PBXGroup;
 			children = (
+				A1D5E0C0AB5E4D0C8F1A2B04 /* AutoSwitchStateMappingTests.swift */,
 				759B52B346EC9CACFBBD0602 /* BridgeErrorMappingTests.swift */,
 				9B81DBB2E205332B08244F8D /* BridgeModelDecodingTests.swift */,
 				C9E1285A3A281C6CC46AE655 /* ClaudeSwapTests.swift */,
@@ -332,6 +337,7 @@
 		E756886522850AD3CFF90128 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				A1D5E0C0AB5E4D0C8F1A2B02 /* AutoSwitchDaemonService.swift */,
 				3A3F7192ABD549A31E38DFFF /* DiagnosticsService.swift */,
 				EB36154E090471748412034B /* LaunchAtLoginService.swift */,
 				24B8A5F0A62877B215B230EE /* NotificationService.swift */,
@@ -518,6 +524,7 @@
 				0FD8533934039462B553616A /* CoreBridgeClientProtocol.swift in Sources */,
 				7271EFCA78D41FB4D55A49DA /* CswapCLIClient.swift in Sources */,
 				E3B0BEC67BCCCD9B658AF34C /* DashboardView.swift in Sources */,
+				A1D5E0C0AB5E4D0C8F1A2B01 /* AutoSwitchDaemonService.swift in Sources */,
 				02E9E399122490E203107E7F /* DiagnosticsService.swift in Sources */,
 				976A89E3DD5FFB905AAC9D8E /* EmptyState.swift in Sources */,
 				B8DF9CF6A42CAC60A7DE4F46 /* LaunchAtLoginService.swift in Sources */,
@@ -540,6 +547,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A1D5E0C0AB5E4D0C8F1A2B03 /* AutoSwitchStateMappingTests.swift in Sources */,
 				D437A3F8B759AF8FE7FF6AB4 /* BridgeErrorMappingTests.swift in Sources */,
 				B8AD32206F46C409A866FB24 /* BridgeModelDecodingTests.swift in Sources */,
 				F9E77453080F1FBE22D90934 /* ClaudeSwapTests.swift in Sources */,
