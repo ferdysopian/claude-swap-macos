@@ -61,7 +61,7 @@
     "coreVersion": "1.2.3"
   },
   "diagnostics": {
-    "corePath": "/Users/example/projects/claude-swap",
+    "corePath": "/usr/local/bin/cswap",
     "helperPID": 4242,
     "uptimeSeconds": 12345.6,
     "warnings": ["autoswitch.model matches no account's usage windows"]
