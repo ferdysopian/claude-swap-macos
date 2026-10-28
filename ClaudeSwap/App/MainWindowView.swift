@@ -63,7 +63,7 @@ private struct ConnectionFooter: View {
         case .connecting: return .connecting
         case .connected: return .connected
         case .fixtureMode: return .fixture
-        case .disconnected: return .disconnected
+        case .disconnected, .cliNotFound, .incompatible: return .disconnected
         }
     }
 }
@@ -78,7 +78,9 @@ private struct ErrorBanner: View {
                 .foregroundStyle(AppColors.status(.critical))
             Text(message)
                 .font(AppTypography.subheadline)
-                .lineLimit(2)
+                .lineLimit(3)
+                .textSelection(.enabled)
+                .help(message)
             Spacer()
             Button {
                 onDismiss()

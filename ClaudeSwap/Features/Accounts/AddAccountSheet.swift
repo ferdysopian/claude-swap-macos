@@ -28,6 +28,9 @@ struct AddAccountSheet: View {
     @State private var errorMessage: String?
     @State private var currentLogin: CurrentClaudeLogin?
     @State private var isLoadingLogin = false
+    /// Set when the CLI reported the chosen slot is taken; the user must
+    /// confirm before anything is overwritten.
+    @State private var occupiedSlot: Int?
 
     var body: some View {
         VStack(alignment: .leading, spacing: AppSpacing.md) {
@@ -72,6 +75,19 @@ struct AddAccountSheet: View {
         }
         .padding(AppSpacing.lg)
         .frame(width: 460)
+        .confirmationDialog(
+            "Replace the account in slot \(occupiedSlot.map(String.init) ?? "")?",
+            isPresented: Binding(get: { occupiedSlot != nil }, set: { if !$0 { occupiedSlot = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Replace Account", role: .destructive) {
+                occupiedSlot = nil
+                submit(overwrite: true)
+            }
+            Button("Cancel", role: .cancel) { occupiedSlot = nil }
+        } message: {
+            Text("That slot already holds an account. Replacing it removes the stored credentials for the old account from cswap. Leave the slot blank to add a new slot instead.")
+        }
         .task(id: mode) {
             guard mode == .currentLogin else { return }
             await refreshCurrentLogin()
@@ -131,7 +147,7 @@ struct AddAccountSheet: View {
 
     private var pasteTokenSection: some View {
         VStack(alignment: .leading, spacing: AppSpacing.sm) {
-            Text("Paste a setup-token or API key — same as `cswap add-token`. The value is sent to the local helper only and never stored by this app.")
+            Text("Paste a setup-token or API key — same as `cswap add-token`. It's passed to cswap on standard input, never on the command line, and this app doesn't store it; cswap saves it with the account.")
                 .font(AppTypography.subheadline)
                 .foregroundStyle(AppColors.textSecondary)
 
@@ -164,10 +180,15 @@ struct AddAccountSheet: View {
     private var canSubmit: Bool {
         switch mode {
         case .currentLogin:
-            return currentLogin != nil
+            return currentLogin != nil && slotIsValid
         case .pasteToken:
-            return !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            return !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && slotIsValid
         }
+    }
+
+    private var slotIsValid: Bool {
+        let trimmed = slotText.trimmingCharacters(in: .whitespaces)
+        return trimmed.isEmpty || (Int(trimmed).map { $0 > 0 } ?? false)
     }
 
     private var parsedSlot: Int? {
@@ -182,7 +203,7 @@ struct AddAccountSheet: View {
         currentLogin = await appModel.peekCurrentClaudeLogin()
     }
 
-    private func submit() {
+    private func submit(overwrite: Bool = false) {
         isSubmitting = true
         errorMessage = nil
         let submittedAlias = alias.trimmingCharacters(in: .whitespaces)
@@ -190,20 +211,27 @@ struct AddAccountSheet: View {
         let slot = parsedSlot
 
         Task {
-            let success: Bool
+            let result: MutationResult
             switch mode {
             case .currentLogin:
-                success = await appModel.addCurrentAccount(alias: aliasValue, slot: slot)
+                result = await appModel.addCurrentAccount(alias: aliasValue, slot: slot, overwrite: overwrite)
             case .pasteToken:
-                let submittedToken = token
-                token = ""
-                success = await appModel.addAccount(token: submittedToken, alias: aliasValue, slot: slot)
+                result = await appModel.addAccount(token: token, alias: aliasValue, slot: slot, overwrite: overwrite)
             }
             isSubmitting = false
-            if success {
+            switch result {
+            case .success:
+                token = ""
                 dismiss()
-            } else {
-                errorMessage = appModel.errorBanner ?? "Could not add account."
+            case .partial(let message):
+                // The account exists; close and let the banner explain.
+                token = ""
+                appModel.errorBanner = message
+                dismiss()
+            case .slotOccupied(let slot):
+                occupiedSlot = slot
+            case .failed(let message):
+                errorMessage = message
             }
         }
     }

@@ -39,6 +39,7 @@ struct AccountsView: View {
                     Label("Add Account", systemImage: "plus")
                 }
                 .buttonStyle(.borderedProminent)
+                .disabled(!appModel.canMutate)
             }
             .padding(AppSpacing.md)
 
@@ -49,8 +50,8 @@ struct AccountsView: View {
                     message: appModel.snapshot.accounts.isEmpty
                         ? "Add your first account to start switching between Claude Code sessions."
                         : "Try a different search term.",
-                    actionTitle: appModel.snapshot.accounts.isEmpty ? "Add Account" : nil,
-                    action: appModel.snapshot.accounts.isEmpty ? { showingAddSheet = true } : nil
+                    actionTitle: appModel.snapshot.accounts.isEmpty && appModel.canMutate ? "Add Account" : nil,
+                    action: appModel.snapshot.accounts.isEmpty && appModel.canMutate ? { showingAddSheet = true } : nil
                 )
                 Spacer()
             } else {
@@ -59,6 +60,7 @@ struct AccountsView: View {
                         AccountRow(
                             account: account,
                             isActive: account.id == appModel.snapshot.activeAccountId,
+                            canMutate: appModel.canMutate && !appModel.isBusy,
                             onSwitch: { Task { await appModel.switchAccount(id: account.id) } },
                             onToggleDisabled: { Task { await appModel.setDisabled(id: account.id, disabled: !account.disabled) } },
                             onEditAlias: {
@@ -94,7 +96,7 @@ struct AccountsView: View {
             }
             Button("Cancel", role: .cancel) { pendingRemoval = nil }
         } message: {
-            Text("Claude Swap will stop tracking this account. Its credentials remain in the Keychain until Claude Code itself removes them.")
+            Text("cswap will remove this account from its managed accounts. Failures or partial results are shown in the banner at the top of the window.")
         }
     }
 }
@@ -102,6 +104,7 @@ struct AccountsView: View {
 private struct AccountRow: View {
     let account: Account
     let isActive: Bool
+    let canMutate: Bool
     let onSwitch: () -> Void
     let onToggleDisabled: () -> Void
     let onEditAlias: () -> Void
@@ -128,11 +131,14 @@ private struct AccountRow: View {
 
             Menu {
                 Button("Switch To This Account", action: onSwitch)
-                    .disabled(isActive || !account.switchable || account.disabled || account.quarantined)
+                    .disabled(!canMutate || isActive || !account.switchable || account.disabled || account.quarantined)
                 Button(account.disabled ? "Enable" : "Disable", action: onToggleDisabled)
+                    .disabled(!canMutate)
                 Button("Edit Alias…", action: onEditAlias)
+                    .disabled(!canMutate)
                 Divider()
                 Button("Remove…", role: .destructive, action: onRemove)
+                    .disabled(!canMutate)
             } label: {
                 Image(systemName: "ellipsis")
                     .font(.system(size: 14, weight: .semibold))

@@ -33,6 +33,9 @@ enum UsageCacheStore {
     /// Load account-number → last-good rows. Lock-free: the core writes via
     /// atomic replace, matching `UsageStore` reader semantics.
     static func loadRows(fileManager: FileManager = .default) -> [String: Row] {
+        // Hosted unit tests run inside the app; never read the developer's
+        // real cswap cache there. Tests inject rows explicitly instead.
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil { return [:] }
         for url in candidateURLs() {
             guard fileManager.isReadableFile(atPath: url.path),
                   let data = try? Data(contentsOf: url),

@@ -106,87 +106,137 @@ private struct MenuBarSettingsPane: View {
 }
 
 private struct UpdatesSettingsPane: View {
-    @State private var isChecking = false
-    @State private var result: UpdateCheckResult?
-    private let updateService: any UpdateServiceProtocol = UpdateService()
-
     var body: some View {
         Form {
-            Button {
-                Task {
-                    isChecking = true
-                    result = await updateService.checkForUpdates()
-                    isChecking = false
-                }
-            } label: {
-                if isChecking {
-                    ProgressView().controlSize(.small)
-                } else {
-                    Text("Check for Updates…")
-                }
-            }
-            .disabled(isChecking)
-
-            if let result {
-                Text(message(for: result))
-                    .font(AppTypography.caption)
-                    .foregroundStyle(AppColors.textSecondary)
-            }
+            Text("Automatic updates aren't available in this build.")
+                .font(AppTypography.body)
+            Link("View releases on GitHub",
+                 destination: URL(string: "https://github.com/ferdysopian/claude-swap-macos/releases")!)
+            Text("Download new versions manually from the releases page. cswap itself is updated separately, for example with `uv tool upgrade claude-swap`.")
+                .font(AppTypography.caption)
+                .foregroundStyle(AppColors.textSecondary)
         }
         .formStyle(.grouped)
         .padding()
-    }
-
-    private func message(for result: UpdateCheckResult) -> String {
-        switch result {
-        case .upToDate: return "You're up to date."
-        case .updateAvailable(let version): return "Version \(version) is available."
-        case .checkFailed(let reason): return "Check failed: \(reason)"
-        case .unsupported: return "Automatic updates aren't configured in this build. Check the GitHub releases page manually."
-        }
     }
 }
 
 private struct AdvancedSettingsPane: View {
     @Environment(AppModel.self) private var appModel
-    @State private var overrideDraft = ""
+    @State private var pathDraft = ""
+    @State private var candidates: [CLICandidate] = []
     @State private var report: DiagnosticsReport?
+    @State private var copied = false
 
     var body: some View {
-        @Bindable var appModel = appModel
         Form {
-            Section {
-                TextField("Local claude-swap checkout path", text: $overrideDraft)
-                    .textFieldStyle(.roundedBorder)
-                    .onSubmit {
-                        appModel.coreOverridePath = overrideDraft.isEmpty ? nil : overrideDraft
+            Section("Command-Line Tool") {
+                LabeledContent("In use") {
+                    Text(appModel.backendStatus?.executablePath ?? "none")
+                        .font(.system(.caption, design: .monospaced))
+                        .textSelection(.enabled)
+                }
+                LabeledContent("Version") {
+                    Text(appModel.backendStatus?.version ?? "unknown")
+                        .font(AppTypography.caption)
+                }
+                LabeledContent("Status") {
+                    Text(statusText)
+                        .font(AppTypography.caption)
+                        .multilineTextAlignment(.trailing)
+                }
+
+                HStack {
+                    TextField("Auto-detect (leave empty)", text: $pathDraft)
+                        .textFieldStyle(.roundedBorder)
+                    Button("Choose…") { chooseExecutable() }
+                }
+                HStack {
+                    Button("Use This Path") { appModel.setCLIExecutablePath(pathDraft) }
+                        .disabled(appModel.isBusy)
+                    Button("Use Auto-Detect") {
+                        pathDraft = ""
+                        appModel.setCLIExecutablePath(nil)
                     }
-                Text("Overrides where Claude Swap looks for a `claude_swap` Python checkout in development (equivalent to CLAUDE_SWAP_CORE_PATH). Restart the app after changing this.")
+                    .disabled(appModel.isBusy || appModel.cswapExecutablePath == nil)
+                    Spacer()
+                    Button("Re-check") { appModel.reconnect() }
+                        .disabled(appModel.isBusy)
+                }
+                if candidates.count > 1 {
+                    VStack(alignment: .leading, spacing: AppSpacing.xxs) {
+                        Text("Found more than one cswap:").font(AppTypography.captionEmphasized)
+                        ForEach(candidates) { candidate in
+                            Button(candidate.path) { pathDraft = candidate.path }
+                                .buttonStyle(.link)
+                                .font(.system(.caption, design: .monospaced))
+                        }
+                    }
+                }
+                Text("Claude Swap uses the cswap command-line tool you installed (for example with `uv tool install claude-swap`). Point it at the `cswap` launcher, such as ~/.local/bin/cswap, not a file inside a virtual environment.")
                     .font(AppTypography.caption)
                     .foregroundStyle(AppColors.textSecondary)
             }
 
-            Section {
-                Button("Copy Diagnostics Report") {
-                    let report = DiagnosticsService.shared.buildReport(
-                        snapshot: appModel.snapshot,
-                        corePath: appModel.coreOverridePath,
-                        helperConnected: appModel.connectionState == .connected
-                    )
-                    self.report = report
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(report.text, forType: .string)
+            Section("Diagnostics") {
+                Button("Generate Report") {
+                    report = DiagnosticsService.buildReport(model: appModel)
+                    copied = false
                 }
                 if let report {
-                    Text(report.text)
-                        .font(.system(.caption, design: .monospaced))
-                        .textSelection(.enabled)
+                    Text("Review before sharing. Tokens, email addresses and your home folder are removed, and account names aren't included.")
+                        .font(AppTypography.caption)
+                        .foregroundStyle(AppColors.textSecondary)
+                    ScrollView {
+                        Text(report.text)
+                            .font(.system(.caption, design: .monospaced))
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(height: 140)
+                    Button(copied ? "Copied" : "Copy Report") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(report.text, forType: .string)
+                        copied = true
+                    }
                 }
             }
         }
         .formStyle(.grouped)
         .padding()
-        .task { overrideDraft = appModel.coreOverridePath ?? "" }
+        .task {
+            pathDraft = appModel.cswapExecutablePath ?? ""
+            candidates = appModel.detectedCLICandidates()
+        }
+    }
+
+    private var statusText: String {
+        switch appModel.connectionState {
+        case .connecting: return "Checking…"
+        case .connected:
+            if case .unverified? = appModel.backendStatus?.compatibility {
+                return "Ready. This cswap version is supported but not yet verified with this app version."
+            }
+            return "Ready"
+        case .fixtureMode: return "Demo data (no real accounts)"
+        case .cliNotFound(let path):
+            return path.map { "Not executable: \($0)" } ?? "cswap not found"
+        case .incompatible(let reason): return reason
+        case .disconnected(let reason): return reason ?? "Couldn't run cswap"
+        }
+    }
+
+    private func chooseExecutable() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.showsHiddenFiles = true
+        panel.resolvesAliases = false
+        panel.directoryURL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".local/bin")
+        if panel.runModal() == .OK, let url = panel.url {
+            pathDraft = url.path
+        }
     }
 }
 

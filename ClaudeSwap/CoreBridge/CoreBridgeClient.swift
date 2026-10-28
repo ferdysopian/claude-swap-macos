@@ -30,11 +30,15 @@ actor CoreBridgeClient: CoreBridgeClientProtocol {
 
     // MARK: - Lifecycle
 
-    func start() async {
-        guard !started else { return }
+    func start() async -> BackendStatus {
+        let path = HelperLocator.locate()?.launchDescription
+        guard !started else {
+            return BackendStatus(kind: .devBridge, readiness: .ready, executablePath: path)
+        }
         started = true
         stopping = false
         await launchOnce()
+        return BackendStatus(kind: .devBridge, readiness: .ready, executablePath: path)
     }
 
     func stop() async {
@@ -317,7 +321,7 @@ actor CoreBridgeClient: CoreBridgeClientProtocol {
     }
 
     @discardableResult
-    func addAccount(token: String, alias: String?, slot: Int?) async throws -> Snapshot {
+    func addAccount(token: String, alias: String?, slot: Int?, overwrite: Bool) async throws -> Snapshot {
         _ = try await send(
             method: .accountsAddToken,
             params: AddTokenParams(secret: token, alias: alias, slot: slot)
@@ -326,7 +330,7 @@ actor CoreBridgeClient: CoreBridgeClientProtocol {
     }
 
     @discardableResult
-    func addCurrentAccount(alias: String?, slot: Int?) async throws -> Snapshot {
+    func addCurrentAccount(alias: String?, slot: Int?, overwrite: Bool) async throws -> Snapshot {
         _ = try await send(
             method: .accountsAddCurrent,
             params: AddCurrentParams(alias: alias, slot: slot)
@@ -377,20 +381,21 @@ actor CoreBridgeClient: CoreBridgeClientProtocol {
         return try await requestSnapshot()
     }
 
-    func exportConfig() async throws -> String {
+    func exportAccounts(to url: URL, accountID: String?) async throws {
         throw BridgeError.requestFailed(
             code: "unsupported",
-            message: "export via bridge is not available; use Tools → Export or `cswap export`"
+            message: "Export isn't available in the development bridge; use `cswap export`."
         )
     }
 
-    @discardableResult
-    func importConfig(_ json: String) async throws -> Snapshot {
+    func importAccounts(from url: URL, overwriteExisting: Bool) async throws -> ImportOutcome {
         throw BridgeError.requestFailed(
             code: "unsupported",
-            message: "import via bridge is not available; use Tools → Import or `cswap import`"
+            message: "Import isn't available in the development bridge; use `cswap import`."
         )
     }
+
+    func automationServiceStatus() async -> AutoSwitchServiceStatus? { nil }
 
     private func decodeLiveSnapshot(_ value: JSONValue) throws -> Snapshot {
         let object = try SnapshotMapping.jsonObject(from: value)

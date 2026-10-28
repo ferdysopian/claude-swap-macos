@@ -2,7 +2,7 @@
 //  ToolsView.swift
 //  ClaudeSwap
 //
-//  Export/import panels, mapping display, and a copyable `cswap run`
+//  Export/import of cswap transfer files, mapping display, and a copyable `cswap run`
 //  command for users who also work from the terminal.
 //
 
@@ -12,16 +12,13 @@ import UniformTypeIdentifiers
 
 struct ToolsView: View {
     @Environment(AppModel.self) private var appModel
-    @State private var exportedText: String?
-    @State private var importText = ""
     @State private var statusMessage: String?
-    @State private var showingImporter = false
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: AppSpacing.lg) {
-                ExportSection(exportedText: $exportedText, statusMessage: $statusMessage)
-                ImportSection(importText: $importText, statusMessage: $statusMessage, showingImporter: $showingImporter)
+                ExportSection(statusMessage: $statusMessage)
+                ImportSection(statusMessage: $statusMessage)
                 MappingsSection()
                 TerminalSection()
 
@@ -34,92 +31,103 @@ struct ToolsView: View {
             .padding(AppSpacing.lg)
         }
         .background(AppColors.background)
-        .fileImporter(isPresented: $showingImporter, allowedContentTypes: [.json]) { result in
-            switch result {
-            case .success(let url):
-                if let data = try? Data(contentsOf: url), let text = String(data: data, encoding: .utf8) {
-                    importText = text
-                }
-            case .failure(let error):
-                statusMessage = "Import failed: \(error.localizedDescription)"
-            }
-        }
     }
 }
 
+/// Export writes cswap's own export file straight to the chosen location.
+/// The file contains credentials, so its contents are never shown in the
+/// UI or put on the clipboard.
 private struct ExportSection: View {
     @Environment(AppModel.self) private var appModel
-    @Binding var exportedText: String?
     @Binding var statusMessage: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: AppSpacing.sm) {
-            CardHeader(title: "Export Configuration", subtitle: "Account list, aliases, and disabled state — no tokens.")
-            HStack {
-                Button("Export…") {
-                    Task {
-                        exportedText = await appModel.exportConfig()
-                        statusMessage = exportedText != nil ? "Exported \(appModel.snapshot.accounts.count) account(s)." : "Export failed."
-                    }
-                }
-                .disabled(!appModel.snapshot.capabilities.supportsExportImport)
-
-                if let exportedText {
-                    Button("Copy to Clipboard") {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(exportedText, forType: .string)
-                        statusMessage = "Copied export to clipboard."
-                    }
-                    Button("Save As…") { save(exportedText) }
-                }
-            }
-            if let exportedText {
-                TextEditor(text: .constant(exportedText))
-                    .font(.system(.caption, design: .monospaced))
-                    .frame(height: 140)
-                    .border(AppColors.divider)
-            }
+            CardHeader(
+                title: "Export Accounts",
+                subtitle: "Writes a `cswap export` file. It contains your account credentials: keep it private and delete it when you're done."
+            )
+            Button("Export…") { chooseDestination() }
+                .disabled(appModel.isBusy || !appModel.snapshot.capabilities.supportsExportImport)
         }
         .cardStyle()
     }
 
-    private func save(_ text: String) {
+    private func chooseDestination() {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.json]
         panel.nameFieldStringValue = "claude-swap-export.json"
-        if panel.runModal() == .OK, let url = panel.url {
-            try? text.write(to: url, atomically: true, encoding: .utf8)
-            statusMessage = "Saved to \(url.lastPathComponent)."
+        panel.message = "The export contains credentials. Save it somewhere private."
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        Task {
+            switch await appModel.exportAccounts(to: url) {
+            case .success, .partial:
+                statusMessage = "Exported to \(url.lastPathComponent). Treat this file like a password."
+            case .failed(let message):
+                statusMessage = "Export failed: \(message)"
+            case .slotOccupied:
+                break
+            }
         }
     }
 }
 
+/// Import hands a chosen `cswap export` file to `cswap import`. Existing
+/// accounts are skipped unless the user explicitly ticks overwrite.
 private struct ImportSection: View {
     @Environment(AppModel.self) private var appModel
-    @Binding var importText: String
     @Binding var statusMessage: String?
-    @Binding var showingImporter: Bool
+    @State private var selectedFile: URL?
+    @State private var overwriteExisting = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: AppSpacing.sm) {
-            CardHeader(title: "Import Configuration")
-            TextEditor(text: $importText)
-                .font(.system(.caption, design: .monospaced))
-                .frame(height: 100)
-                .border(AppColors.divider)
+            CardHeader(title: "Import Accounts", subtitle: "Reads a file made by `cswap export`.")
             HStack {
-                Button("Choose File…") { showingImporter = true }
-                Button("Import") {
-                    Task {
-                        let success = await appModel.importConfig(importText)
-                        statusMessage = success ? "Import applied." : "Import failed — check the file format."
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(importText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !appModel.snapshot.capabilities.supportsExportImport)
+                Button("Choose File…") { chooseFile() }
+                Text(selectedFile?.lastPathComponent ?? "No file selected")
+                    .font(AppTypography.subheadline)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
             }
+            Toggle("Overwrite accounts that already exist", isOn: $overwriteExisting)
+            Text(overwriteExisting
+                 ? "Matching accounts will be replaced with the credentials from the file (`cswap import --force`)."
+                 : "Accounts that already exist are left unchanged and listed as skipped.")
+                .font(AppTypography.caption)
+                .foregroundStyle(overwriteExisting ? AppColors.status(.attention) : AppColors.textTertiary)
+            Button("Import") { runImport() }
+                .buttonStyle(.borderedProminent)
+                .disabled(selectedFile == nil || appModel.isBusy || !appModel.snapshot.capabilities.supportsExportImport)
         }
         .cardStyle()
+    }
+
+    private func chooseFile() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.json]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        if panel.runModal() == .OK { selectedFile = panel.url }
+    }
+
+    private func runImport() {
+        guard let selectedFile else { return }
+        let overwrite = overwriteExisting
+        Task {
+            switch await appModel.importAccounts(from: selectedFile, overwriteExisting: overwrite) {
+            case .success:
+                statusMessage = "Import applied."
+            case .partial(let message):
+                statusMessage = message
+            case .failed(let message):
+                statusMessage = "Import failed: \(message)"
+            case .slotOccupied:
+                break
+            }
+            overwriteExisting = false
+        }
     }
 }
 

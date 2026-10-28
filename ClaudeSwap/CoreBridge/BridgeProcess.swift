@@ -12,16 +12,14 @@ import Foundation
 
 /// Where to find the core helper executable / interpreter.
 enum HelperLocation: Sendable, Equatable {
-    /// A bundled, signed-or-not helper binary shipped inside the app.
-    case bundled(URL)
-    /// A standalone `cswap-bridge` executable on PATH (or next to `cswap`).
+    /// A standalone bridge executable (development only).
     case bridgeExecutable(URL)
-    /// A dev-mode / tool-install: run `python -m claude_swap.bridge`.
+    /// Development checkout: run `python -m claude_swap.bridge`.
     case pythonModule(interpreter: URL, workingDirectory: URL?)
 
     var launchDescription: String {
         switch self {
-        case .bundled(let url), .bridgeExecutable(let url):
+        case .bridgeExecutable(let url):
             return url.path
         case .pythonModule(let interpreter, let workingDirectory):
             let cwd = workingDirectory.map { " (cwd: \($0.path))" } ?? ""
@@ -30,192 +28,80 @@ enum HelperLocation: Sendable, Equatable {
     }
 }
 
-/// How the app should talk to an installed Claude Swap installation.
+/// How the app should talk to Claude Swap.
 enum CoreBackend: Sendable, Equatable {
-    /// NDJSON bridge helper (preferred when available).
+    /// Development only: NDJSON bridge from a local checkout, selected with
+    /// `CLAUDE_SWAP_BACKEND=bridge` + `CLAUDE_SWAP_CORE_PATH`. Released
+    /// upstream versions ship no bridge module.
     case bridge(HelperLocation)
-    /// Shell out to an installed `cswap` CLI (live accounts, no bridge module).
-    case cli(cswapURL: URL)
-    /// No install found — use in-app fixture/preview data.
+    /// Production: the separately installed `cswap` CLI.
+    case cli(CLICandidate)
+    /// Explicit demo data (previews, tests, `-demoMode`).
     case fixture
+    /// No usable CLI. `configuredPath` is set when an explicit path was
+    /// given but isn't executable.
+    case unavailable(configuredPath: String?)
 }
 
-/// Resolves how to reach Claude Swap, in priority order:
-/// 1. `CLAUDE_SWAP_CORE_PATH` / Settings override (checkout with bridge)
-/// 2. Bundled `claude-swap-helper`
-/// 3. Installed `cswap-bridge` or `cswap`'s Python **with** `claude_swap.bridge`
-/// 4. Installed `cswap` on PATH (CLI live mode — even without bridge)
-/// 5. Sibling `claude-swap` checkout with a venv + bridge (dev)
-/// 6. Fixture
+/// Picks the backend. Production builds only ever use the installed CLI;
+/// demo data and the dev bridge must be asked for explicitly, and nothing
+/// falls back to a sibling checkout or to demo data on its own.
 enum HelperLocator {
-    static let userDefaultsKey = "coreOverridePath"
+    static let backendEnvironmentKey = "CLAUDE_SWAP_BACKEND"
+    static let devCorePathEnvironmentKey = "CLAUDE_SWAP_CORE_PATH"
+    static let demoLaunchArgument = "-demoMode"
 
     static func resolveBackend(
         environment: [String: String] = ProcessInfo.processInfo.environment,
+        arguments: [String] = ProcessInfo.processInfo.arguments,
         userDefaults: UserDefaults = .standard,
-        bundle: Bundle = .main,
+        home: URL = FileManager.default.homeDirectoryForCurrentUser,
         fileManager: FileManager = .default
     ) -> CoreBackend {
-        if let overridePath = environment["CLAUDE_SWAP_CORE_PATH"],
-           let location = pythonLocation(atRepoRoot: overridePath, fileManager: fileManager),
-           bridgeImportable(location) {
+        // Hosted unit tests launch the app itself; never let that touch the
+        // developer's real CLI, accounts or Keychain.
+        if environment["XCTestConfigurationFilePath"] != nil
+            || environment[backendEnvironmentKey] == "fixture"
+            || arguments.contains(demoLaunchArgument) {
+            return .fixture
+        }
+        if environment[backendEnvironmentKey] == "bridge" {
+            guard let root = environment[devCorePathEnvironmentKey],
+                  let location = pythonLocation(atRepoRoot: root, fileManager: fileManager) else {
+                return .unavailable(configuredPath: environment[devCorePathEnvironmentKey])
+            }
             return .bridge(location)
         }
-        if let overridePath = userDefaults.string(forKey: userDefaultsKey),
-           let location = pythonLocation(atRepoRoot: overridePath, fileManager: fileManager),
-           bridgeImportable(location) {
-            return .bridge(location)
+        switch CLIDiscovery.resolve(environment: environment, userDefaults: userDefaults, home: home, fileManager: fileManager) {
+        case .found(let candidate):
+            return .cli(candidate)
+        case .configuredPathInvalid(let path):
+            return .unavailable(configuredPath: path)
+        case .notFound:
+            return .unavailable(configuredPath: nil)
         }
-        if let bundled = bundle.url(forAuxiliaryExecutable: "claude-swap-helper"),
-           fileManager.isExecutableFile(atPath: bundled.path) {
-            return .bridge(.bundled(bundled))
-        }
-        if let bridge = findExecutable(named: "cswap-bridge", environment: environment, fileManager: fileManager) {
-            return .bridge(.bridgeExecutable(bridge))
-        }
-        if let cswap = findExecutable(named: "cswap", environment: environment, fileManager: fileManager) {
-            if let location = pythonFromCswapLauncher(cswap, fileManager: fileManager),
-               bridgeImportable(location) {
-                return .bridge(location)
-            }
-            // Installed cswap without bridge → still use live CLI data.
-            return .cli(cswapURL: cswap)
-        }
-        for candidate in siblingCheckoutCandidates() {
-            if let location = pythonLocation(atRepoRoot: candidate, fileManager: fileManager),
-               bridgeImportable(location) {
-                return .bridge(location)
-            }
-        }
-        return .fixture
     }
 
-    /// Back-compat for call sites that only care about a bridge helper.
-    static func locate(
-        environment: [String: String] = ProcessInfo.processInfo.environment,
-        userDefaults: UserDefaults = .standard,
-        bundle: Bundle = .main,
-        fileManager: FileManager = .default
-    ) -> HelperLocation? {
-        if case .bridge(let location) = resolveBackend(
-            environment: environment,
-            userDefaults: userDefaults,
-            bundle: bundle,
-            fileManager: fileManager
-        ) {
+    /// The dev bridge location, if (and only if) it was explicitly selected.
+    static func locate(environment: [String: String] = ProcessInfo.processInfo.environment) -> HelperLocation? {
+        if case .bridge(let location) = resolveBackend(environment: environment) {
             return location
         }
         return nil
     }
 
-    /// Given a checkout root (e.g. `.../projects/claude-swap`), find a
-    /// usable Python interpreter in its virtualenv.
+    /// Given a checkout root, find a Python interpreter in its virtualenv.
     private static func pythonLocation(atRepoRoot root: String, fileManager: FileManager) -> HelperLocation? {
         let rootURL = URL(fileURLWithPath: (root as NSString).expandingTildeInPath, isDirectory: true)
         let candidates = [
             rootURL.appendingPathComponent(".venv/bin/python3"),
             rootURL.appendingPathComponent(".venv/bin/python"),
-            rootURL.appendingPathComponent(".venv312/bin/python3"),
             rootURL.appendingPathComponent("venv/bin/python3"),
         ]
         for candidate in candidates where fileManager.isExecutableFile(atPath: candidate.path) {
             return .pythonModule(interpreter: candidate, workingDirectory: rootURL)
         }
         return nil
-    }
-
-    private static func findExecutable(
-        named name: String,
-        environment: [String: String],
-        fileManager: FileManager
-    ) -> URL? {
-        let pathEnv = environment["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin"
-        // GUI apps often inherit a minimal PATH — also check common user bins.
-        let extra = [
-            "\(NSHomeDirectory())/.local/bin",
-            "\(NSHomeDirectory())/.cargo/bin",
-            "/opt/homebrew/bin",
-            "/usr/local/bin",
-        ]
-        var dirs = pathEnv.split(separator: ":").map(String.init)
-        for dir in extra where !dirs.contains(dir) {
-            dirs.append(dir)
-        }
-        for dir in dirs {
-            let url = URL(fileURLWithPath: dir).appendingPathComponent(name)
-            if fileManager.isExecutableFile(atPath: url.path) {
-                return url.resolvingSymlinksInPath()
-            }
-        }
-        return nil
-    }
-
-    /// `cswap` is typically a uv/pip console_script with a shebang pointing
-    /// at the tool env's python.
-    private static func pythonFromCswapLauncher(_ cswap: URL, fileManager: FileManager) -> HelperLocation? {
-        guard let shebang = readShebang(of: cswap) else {
-            let siblingPython = cswap.deletingLastPathComponent().appendingPathComponent("python")
-            if fileManager.isExecutableFile(atPath: siblingPython.path) {
-                return .pythonModule(interpreter: siblingPython, workingDirectory: nil)
-            }
-            return nil
-        }
-        let interpreter = URL(fileURLWithPath: shebang)
-        guard fileManager.isExecutableFile(atPath: interpreter.path) else { return nil }
-        return .pythonModule(interpreter: interpreter, workingDirectory: nil)
-    }
-
-    private static func readShebang(of url: URL) -> String? {
-        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
-        defer { try? handle.close() }
-        let data = handle.readData(ofLength: 512)
-        guard let text = String(data: data, encoding: .utf8), text.hasPrefix("#!") else { return nil }
-        let line = text.split(separator: "\n", maxSplits: 1).first.map(String.init) ?? ""
-        let path = line.dropFirst(2).trimmingCharacters(in: .whitespaces)
-        return path.isEmpty ? nil : path
-    }
-
-    private static func bridgeImportable(_ location: HelperLocation) -> Bool {
-        switch location {
-        case .bundled, .bridgeExecutable:
-            return true
-        case .pythonModule(let interpreter, _):
-            let process = Process()
-            process.executableURL = interpreter
-            process.arguments = ["-c", "import importlib.util as u; raise SystemExit(0 if u.find_spec('claude_swap.bridge') else 1)"]
-            process.standardOutput = FileHandle.nullDevice
-            process.standardError = FileHandle.nullDevice
-            do {
-                try process.run()
-                process.waitUntilExit()
-                return process.terminationStatus == 0
-            } catch {
-                return false
-            }
-        }
-    }
-
-    private static func siblingCheckoutCandidates() -> [String] {
-        var paths: [String] = []
-        // Common layout: .../projects/claude-swap-macos next to .../claude-swap
-        let home = NSHomeDirectory()
-        paths.append("\(home)/Developer/claude-swap")
-        if let cwd = FileManager.default.currentDirectoryPath as String? {
-            paths.append((cwd as NSString).appendingPathComponent("../claude-swap"))
-            paths.append((cwd as NSString).deletingLastPathComponent + "/claude-swap")
-        }
-        // App bundle lives under build/... — walk up looking for a sibling.
-        if let exe = Bundle.main.executableURL {
-            var dir = exe.deletingLastPathComponent()
-            for _ in 0..<8 {
-                let sibling = dir.appendingPathComponent("claude-swap")
-                paths.append(sibling.path)
-                let parentSibling = dir.deletingLastPathComponent().appendingPathComponent("claude-swap")
-                paths.append(parentSibling.path)
-                dir = dir.deletingLastPathComponent()
-            }
-        }
-        return paths
     }
 }
 
@@ -235,7 +121,7 @@ final class BridgeProcess {
     func launch(_ location: HelperLocation) throws -> AsyncStream<String> {
         let process = Process()
         switch location {
-        case .bundled(let url), .bridgeExecutable(let url):
+        case .bridgeExecutable(let url):
             process.executableURL = url
             process.arguments = []
         case .pythonModule(let interpreter, let workingDirectory):

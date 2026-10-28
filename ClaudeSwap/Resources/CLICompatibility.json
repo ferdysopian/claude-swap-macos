@@ -1,0 +1,10 @@
+{
+  "cli": "cswap",
+  "package": "claude-swap",
+  "upstream": "https://github.com/realiti4/claude-swap",
+  "minimumVersion": "0.26.0",
+  "baselineVersion": "0.26.0",
+  "verifiedVersions": [],
+  "jsonSchemaVersions": [1],
+  "notes": "minimumVersion/baselineVersion: the official release whose public CLI (cli.py at v0.26.0) the wrapper's argument and JSON mapping was written against. verifiedVersions lists only releases that passed the wrapper's contract checklist against the unmodified official package (docs/QA_MATRIX.md); it stays empty until that run happens. Fake-executable unit tests do not count as verification."
+}

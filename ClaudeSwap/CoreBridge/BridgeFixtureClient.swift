@@ -23,9 +23,10 @@ actor BridgeFixtureClient: CoreBridgeClientProtocol {
 
     // MARK: - CoreBridgeClientProtocol
 
-    func start() async {
+    func start() async -> BackendStatus {
         broadcast(.helperConnected)
         broadcast(.snapshotChanged(snapshot))
+        return .demo
     }
 
     func stop() async {
@@ -102,7 +103,10 @@ actor BridgeFixtureClient: CoreBridgeClientProtocol {
     }
 
     @discardableResult
-    func addAccount(token: String, alias: String?, slot: Int?) async throws -> Snapshot {
+    func addAccount(token: String, alias: String?, slot: Int?, overwrite: Bool) async throws -> Snapshot {
+        if let slot, !overwrite, snapshot.accounts.contains(where: { $0.id == String(slot) }) {
+            throw BridgeError.slotOccupied(slot)
+        }
         guard !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw BridgeError.requestFailed(code: "empty-token", message: "Token cannot be empty.")
         }
@@ -135,7 +139,10 @@ actor BridgeFixtureClient: CoreBridgeClientProtocol {
     }
 
     @discardableResult
-    func addCurrentAccount(alias: String?, slot: Int?) async throws -> Snapshot {
+    func addCurrentAccount(alias: String?, slot: Int?, overwrite: Bool) async throws -> Snapshot {
+        if let slot, !overwrite, snapshot.accounts.contains(where: { $0.id == String(slot) }) {
+            throw BridgeError.slotOccupied(slot)
+        }
         let number = slot ?? ((snapshot.accounts.map(\.id).compactMap { Int($0) }.max() ?? 0) + 1)
         if let existing = snapshot.accounts.firstIndex(where: { $0.id == String(number) }) {
             var updated = snapshot.accounts[existing]
@@ -219,32 +226,27 @@ actor BridgeFixtureClient: CoreBridgeClientProtocol {
         return snapshot
     }
 
-    func exportConfig() async throws -> String {
-        let exportable = snapshot.accounts.map { account in
-            [
-                "id": account.id,
-                "email": account.email,
-                "alias": account.alias ?? "",
-                "organizationName": account.organizationName ?? "",
-                "disabled": String(account.disabled),
-            ]
-        }
-        let data = try JSONSerialization.data(withJSONObject: ["accounts": exportable], options: [.prettyPrinted, .sortedKeys])
-        return String(data: data, encoding: .utf8) ?? "{}"
+    /// Demo export: a small, clearly labelled file with no credentials, so
+    /// the Save panel flow can be exercised without a real CLI.
+    func exportAccounts(to url: URL, accountID: String?) async throws {
+        let accounts = snapshot.accounts
+            .filter { accountID == nil || $0.id == accountID }
+            .map { ["number": $0.id, "email": $0.email, "alias": $0.alias ?? ""] }
+        let object: [String: Any] = ["demo": true, "note": "Claude Swap demo data, not a cswap export.", "accounts": accounts]
+        let data = try JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys])
+        try data.write(to: url, options: .atomic)
     }
 
-    @discardableResult
-    func importConfig(_ json: String) async throws -> Snapshot {
-        guard let data = json.data(using: .utf8),
-              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              object["accounts"] != nil else {
-            throw BridgeError.requestFailed(code: "invalid-config", message: "That file doesn't look like a Claude Swap export.")
+    /// Demo import never changes accounts; it only reports what it read.
+    func importAccounts(from url: URL, overwriteExisting: Bool) async throws -> ImportOutcome {
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            throw BridgeError.requestFailed(code: "import.missing", message: "The selected file doesn't exist.")
         }
-        // Fixture mode: acknowledge the import without mutating accounts,
-        // since aliases/disabled-state are already represented locally.
         publishSnapshot()
-        return snapshot
+        return ImportOutcome(snapshot: snapshot, skipped: overwriteExisting ? [] : ["Skipped (demo mode: nothing is imported)"])
     }
+
+    func automationServiceStatus() async -> AutoSwitchServiceStatus? { nil }
 
     // MARK: - Helpers
 

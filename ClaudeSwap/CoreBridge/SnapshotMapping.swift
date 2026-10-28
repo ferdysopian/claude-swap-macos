@@ -18,7 +18,8 @@ enum SnapshotMapping {
         coreVersion: String,
         corePath: String?,
         warnings: [String] = [],
-        autoSwitch: AutoSwitchState = .disabled
+        autoSwitch: AutoSwitchState = .disabled,
+        usageCacheRows: [String: UsageCacheStore.Row]? = nil
     ) -> Snapshot {
         let accountsRaw = payload["accounts"] as? [[String: Any]] ?? []
         let activeNumber = payload["activeAccountNumber"] as? Int
@@ -44,7 +45,7 @@ enum SnapshotMapping {
                 uptimeSeconds: 0,
                 warnings: warnings
             )
-        ).enrichingFromUsageCache()
+        ).enrichingFromUsageCache(rows: usageCacheRows)
     }
 
     /// Build a UI snapshot from a bridge `snapshot` result dict.

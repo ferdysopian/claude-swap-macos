@@ -17,8 +17,8 @@ settings:
     DEVELOPMENT_TEAM: ""
     ENABLE_HARDENED_RUNTIME: NO
     SWIFT_STRICT_CONCURRENCY: complete
-    MARKETING_VERSION: "0.1.0"
-    CURRENT_PROJECT_VERSION: "1"
+    MARKETING_VERSION: "0.2.0"
+    CURRENT_PROJECT_VERSION: "8"
     COMBINE_HIDPI_IMAGES: YES
     ENABLE_PREVIEWS: YES
     SWIFT_EMIT_LOC_STRINGS: YES
@@ -80,6 +80,9 @@ targets:
         embed: false
 
 schemes:
+  # Unit tests only. They run hosted inside the app, so the test action
+  # forces the in-memory demo backend: tests never launch the user's real
+  # `cswap`, touch the Keychain, or talk to launchd.
   ClaudeSwap:
     build:
       parallelizeBuild: true
@@ -87,17 +90,30 @@ schemes:
       targets:
         ClaudeSwap: all
         ClaudeSwapTests: [test]
-        ClaudeSwapUITests: [test]
     run:
       config: Debug
     test:
       config: Debug
+      environmentVariables:
+        CLAUDE_SWAP_BACKEND: fixture
       targets:
         - ClaudeSwapTests
-        - ClaudeSwapUITests
     profile:
       config: Release
     analyze:
       config: Debug
     archive:
       config: Release
+  # XCUITest smoke test. Needs a logged-in GUI session with Accessibility
+  # permission, so it is kept out of the default scheme and CI unit runs.
+  ClaudeSwapUITests:
+    build:
+      targets:
+        ClaudeSwap: all
+        ClaudeSwapUITests: [test]
+    test:
+      config: Debug
+      environmentVariables:
+        CLAUDE_SWAP_BACKEND: fixture
+      targets:
+        - ClaudeSwapUITests

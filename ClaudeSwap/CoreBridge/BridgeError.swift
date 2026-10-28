@@ -29,6 +29,18 @@ enum BridgeError: Error, Sendable, Equatable, CustomStringConvertible {
     case notConnected
     /// Decoding a well-formed JSON payload into a Swift model failed.
     case decodingFailed(String)
+    /// No `cswap` launcher was found, or the configured path isn't executable.
+    case cliNotFound(String?)
+    /// The installed `cswap` is outside the supported range or speaks an
+    /// unknown JSON schema; mutations are blocked.
+    case incompatible(String)
+    /// A mutating command timed out or was cancelled after launch. It may or
+    /// may not have taken effect; state must be re-read before retrying.
+    case outcomeUnknown(operation: String)
+    /// The main step succeeded but a follow-up step (e.g. alias) failed.
+    case partialSuccess(String)
+    /// Adding into an occupied slot needs explicit overwrite confirmation.
+    case slotOccupied(Int)
 
     var description: String {
         switch self {
@@ -52,6 +64,19 @@ enum BridgeError: Error, Sendable, Equatable, CustomStringConvertible {
             return "Not connected to the core helper."
         case .decodingFailed(let detail):
             return "Failed to decode core helper response: \(detail)"
+        case .cliNotFound(let path):
+            if let path {
+                return "No executable cswap at \(path). Choose the cswap command-line tool in Settings > Command-Line Tool."
+            }
+            return "The cswap command-line tool isn't installed or couldn't be found. Install claude-swap, then choose it in Settings > Command-Line Tool."
+        case .incompatible(let reason):
+            return reason
+        case .outcomeUnknown(let operation):
+            return "\"\(operation)\" didn't finish in time. It may or may not have been applied; Claude Swap re-read the account state. Check it before trying again."
+        case .partialSuccess(let message):
+            return message
+        case .slotOccupied(let slot):
+            return "Slot \(slot) already holds an account."
         }
     }
 
@@ -59,7 +84,8 @@ enum BridgeError: Error, Sendable, Equatable, CustomStringConvertible {
     /// error, versus surfacing a hard failure that needs user action.
     var isRecoverable: Bool {
         switch self {
-        case .helperNotFound, .protocolMismatch, .requestFailed:
+        case .helperNotFound, .protocolMismatch, .requestFailed, .cliNotFound, .incompatible,
+             .outcomeUnknown, .partialSuccess, .slotOccupied:
             return false
         default:
             return true
