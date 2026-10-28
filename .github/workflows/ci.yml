@@ -1,8 +1,10 @@
 name: CI
 
-# Runs on every PR and on pushes to the integration branches. Uses NO
-# secrets: everything here is unsigned by design (see scripts/build-app.sh /
-# docs/SIGNING.md). Safe to run on forked-repo PRs.
+# Runs on pushes to main and on every PR. Uses NO secrets: builds are
+# unsigned by design (see scripts/build-app.sh and scripts/package-release.sh).
+# Safe to run on forked-repo PRs.
+#
+# TODO: pin to reviewed commit SHAs before public release
 on:
   pull_request:
   push:
@@ -21,23 +23,23 @@ env:
   CI: "true"
 
 jobs:
-  verify-core-lock:
-    name: Verify core dependency lock
+  metadata:
+    name: Verify release metadata
     runs-on: macos-15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Verify Dependencies/CoreDependency.lock.json
-        run: ./scripts/verify-core.sh
-        # Non-fatal on an unpinned (PENDING) commitSha by design — see
-        # scripts/verify-core.sh header. Real releases should additionally
-        # gate on --require-pin in release.yml.
+      - name: Install xcodegen
+        run: brew install xcodegen
 
-  swift-build-and-test:
+      - name: Verify metadata (incl. xcodegen drift check)
+        run: ./scripts/verify-metadata.sh --check-xcodegen
+
+  build-test:
     name: Build & test ClaudeSwap (unsigned)
     runs-on: macos-15
-    needs: verify-core-lock
+    needs: metadata
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -49,11 +51,8 @@ jobs:
 
       - name: Build (Debug, unsigned)
         run: ./scripts/build-app.sh --config Debug --action build
-        # Gracefully exits 0 if ClaudeSwap.xcodeproj isn't fully scaffolded
-        # yet — see scripts/build-app.sh. Once the project lands this
-        # actually builds.
 
-      - name: Test (Debug, unsigned)
+      - name: Test (Debug, unsigned, unit tests only)
         run: ./scripts/build-app.sh --config Debug --action test
 
   shell-lint:

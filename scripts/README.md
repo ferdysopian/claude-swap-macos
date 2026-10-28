@@ -1,25 +1,32 @@
 # scripts/
 
-Packaging, build, and release automation for `claude-swap-macos`. Full docs: [`../docs/PACKAGING.md`](../docs/PACKAGING.md), [`../docs/SIGNING.md`](../docs/SIGNING.md), [`../docs/UPDATING-CORE.md`](../docs/UPDATING-CORE.md).
+Build, check, and packaging scripts for `claude-swap-macos`. Run them from the repository root. See [`../docs/PACKAGING.md`](../docs/PACKAGING.md) and [`../docs/RELEASE.md`](../docs/RELEASE.md) for the release flow, and [`../docs/SIGNING.md`](../docs/SIGNING.md) for signing.
+
+The release DMG contains only the wrapper app. The upstream `cswap` CLI is installed separately by users and is not built or bundled by any script here.
 
 | Script | Purpose |
 |---|---|
-| `bootstrap.sh` | One-shot dev environment setup. Run this first. |
-| `build-core-helper.sh` | Freeze the Python core (`../Dependencies/CoreDependency.lock.json` pin, or a local override) into a helper executable via PyInstaller. Read the arch caveats in the file header before touching `--arch`. |
-| `update-core.sh` | Re-pin the core to an explicit `--tag`/`--sha`. Tests + smoke-builds before writing the lock file. Never runs `git push`. |
-| `verify-core.sh` | Validate the lock file (used by CI on every PR). |
-| `build-app.sh` | Unsigned `xcodebuild` build/test of `ClaudeSwap.xcodeproj`. No-ops gracefully if the project isn't scaffolded yet. |
-| `package-release.sh` | Full release packaging: helper(s) + app + sign/notarize (only if credentials are configured) + DMG + checksums + Sparkle appcast item. |
-| `lib/common.sh` | Shared bash helpers (logging, lock-file access, core-source resolution). Sourced by every script above; not run directly. |
-| `lib/lock.py` | Dependency-free JSON get/set/validate for the lock file. Used by `common.sh`; you can also call it directly for scripting. |
+| `bootstrap.sh` | Developer setup. Installs XcodeGen if needed and regenerates `ClaudeSwap.xcodeproj` from `project.yml`. Run it first. |
+| `build-app.sh` | `xcodebuild` wrapper. Usage: `scripts/build-app.sh [--config Debug\|Release] [--action build\|test\|ui-test] [--derived-data <dir>] [--arch arm64\|x86_64\|universal2]`. `build` and `test` use scheme `ClaudeSwap`; `ui-test` uses scheme `ClaudeSwapUITests` and needs a GUI session with Accessibility permission. DerivedData defaults to `build/DerivedData`. |
+| `verify-metadata.sh` | Offline consistency checks: `CLICompatibility.json` shape, version values in `project.yml` against `project.pbxproj`, `Info.plist` version placeholders, no personal home paths in tracked config, and a single `Info.plist`. Add `--check-xcodegen` to regenerate the project into a temporary location and compare it with the committed project. CI runs this as the `metadata` job. |
+| `package-release.sh` | Builds a Release app and packages it as a DMG with a SHA-256 file in `dist/`. Usage: `scripts/package-release.sh [--config Release] [--notarize] [--dry-run]`. `--dry-run` prints the version, artifact name, and planned steps without building. Signing happens only when `DEVELOPER_ID_APPLICATION` is set. Without it, the artifact is named `*-unsigned.dmg`. `--notarize` submits the DMG with `notarytool` and staples it; it requires `DEVELOPER_ID_APPLICATION` and `NOTARY_PROFILE`. |
+| `lib/common.sh` | Shared shell helpers (logging, paths, reading `project.yml` settings). Sourced by the scripts above; not run directly. |
+| `generate_app_icon.swift` | Generates the placeholder `AppIcon` artwork. Run it manually when the icon changes; it is not part of the build. |
 
 ## Quick start
 
 ```sh
 scripts/bootstrap.sh
-scripts/build-core-helper.sh
-scripts/build-app.sh --config Debug
-scripts/package-release.sh
+scripts/verify-metadata.sh --check-xcodegen
+scripts/build-app.sh --config Debug --action build
+scripts/build-app.sh --config Debug --action test
+scripts/package-release.sh --dry-run
 ```
 
-Every script supports `-h`/`--help` (prints its own header comment).
+Shell lint, as run in CI:
+
+```sh
+(cd scripts && shellcheck -x ./*.sh ./lib/*.sh)
+```
+
+Every script supports `-h`/`--help`, which prints its header comment.

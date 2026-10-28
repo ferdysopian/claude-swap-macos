@@ -1,160 +1,87 @@
 name: Release
 
-# Triggered by pushing a tag like v0.1.0 (or workflow_dispatch). Builds a
-# Release .app, optionally embeds a frozen core helper, packages a DMG, and
-# publishes a *draft* GitHub Release.
+# Triggered only by pushing a version tag such as v0.2.0. Verifies the tag
+# against project.yml, runs the metadata and unit checks, packages a Release
+# DMG with a SHA-256 file, and creates a DRAFT GitHub release in this repo.
+# Nothing here writes to any other repository.
 #
-# Bootstrap notes (private repo / early releases):
-#   - Default matrix is arm64-only on macos-15 (reliable). Set input
-#     `include_intel: true` once you have macos-15-intel (or self-hosted).
-#   - Core pin can still be PENDING — helper embed is then skipped and the
-#     app falls back to discovering an installed `cswap` / fixture mode.
-#     Pass `require_pin: true` for production-cut releases.
+# Wrapper-only release: the upstream `cswap` CLI is NOT bundled.
 #
 # ── Secrets (all OPTIONAL) ───────────────────────────────────────────────
-# Missing secrets → unsigned DMG (see docs/SIGNING.md). Never fabricates certs.
+# With no signing secrets the job still runs and produces an UNSIGNED,
+# NOT NOTARIZED DMG. The draft release is then marked as a prerelease with an
+# "unsigned experimental build" note.
 #
-#   CODESIGN_IDENTITY, CODESIGN_CERT_P12_BASE64, CODESIGN_CERT_PASSWORD
-#   APPLE_TEAM_ID, APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD
-#   SPARKLE_PRIVATE_KEY
+#   CODESIGN_IDENTITY              Developer ID Application identity string
+#   CODESIGN_CERT_P12_BASE64       base64 of the Developer ID .p12
+#   CODESIGN_CERT_PASSWORD         password for the .p12
+#   APPLE_ID, APPLE_TEAM_ID, APPLE_APP_SPECIFIC_PASSWORD
+#                                  notarization (only used when all are set
+#                                  together with CODESIGN_IDENTITY)
+#
+# TODO: pin to reviewed commit SHAs before public release
 on:
   push:
     tags:
       - "v*"
-  workflow_dispatch:
-    inputs:
-      version:
-        description: "Version label without leading v (used when not tagging)"
-        type: string
-        default: "0.0.0-dev"
-      require_pin:
-        description: "Fail if CoreDependency.lock.json still has a PENDING commitSha"
-        type: boolean
-        default: false
-      include_intel:
-        description: "Also build x86_64 helper on macos-15-intel (if available)"
-        type: boolean
-        default: false
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  verify:
-    name: Verify core lock
-    runs-on: macos-15
-    outputs:
-      pinned: ${{ steps.pin.outputs.pinned }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: Schema / shape check
-        run: ./scripts/verify-core.sh
-      - name: Detect whether commitSha is pinned
-        id: pin
-        run: |
-          sha="$(python3 -c "import json; print(json.load(open('Dependencies/CoreDependency.lock.json'))['commitSha'])")"
-          if [[ "$sha" == PENDING* || -z "$sha" || "$sha" == "null" ]]; then
-            echo "pinned=false" >> "$GITHUB_OUTPUT"
-            echo "Core lock is still PENDING — release will ship without an embedded helper."
-          else
-            echo "pinned=true" >> "$GITHUB_OUTPUT"
-            echo "Core lock is pinned to $sha"
-          fi
-      - name: Require pin (optional)
-        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.require_pin) || false }}
-        run: ./scripts/verify-core.sh --require-pin
-
-  build-core-helper:
-    name: Build core helper (${{ matrix.arch }})
-    needs: verify
-    if: needs.verify.outputs.pinned == 'true'
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: arm64
-            runner: macos-15
-          # Intel leg is opt-in via workflow_dispatch; tag pushes stay arm64-only
-          # until macos-15-intel (or a self-hosted Intel runner) is available.
-    runs-on: ${{ matrix.runner }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: Build helper
-        run: ./scripts/build-core-helper.sh --arch ${{ matrix.arch }}
-      - name: Upload helper artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: core-helper-${{ matrix.arch }}
-          path: dist/core-helper/${{ matrix.arch }}
-          if-no-files-found: error
-
-  build-core-helper-intel:
-    name: Build core helper (x86_64)
-    needs: verify
-    if: ${{ needs.verify.outputs.pinned == 'true' && github.event_name == 'workflow_dispatch' && inputs.include_intel }}
-    runs-on: macos-15-intel
-    steps:
-      - uses: actions/checkout@v4
-      - name: Build helper
-        run: ./scripts/build-core-helper.sh --arch x86_64
-      - name: Upload helper artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: core-helper-x86_64
-          path: dist/core-helper/x86_64
-          if-no-files-found: error
-
   package:
-    name: Build app, sign (if configured), package DMG
-    needs: [verify, build-core-helper, build-core-helper-intel]
-    # Run even when helper jobs were skipped (PENDING pin) or intel failed.
-    if: always() && needs.verify.result == 'success' && (needs.build-core-helper.result == 'success' || needs.build-core-helper.result == 'skipped')
+    name: Validate tag, test, package DMG
     runs-on: macos-15
     env:
+      TAG: ${{ github.ref_name }}
       CODESIGN_IDENTITY: ${{ secrets.CODESIGN_IDENTITY }}
-      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      CODESIGN_CERT_P12_BASE64: ${{ secrets.CODESIGN_CERT_P12_BASE64 }}
+      CODESIGN_CERT_PASSWORD: ${{ secrets.CODESIGN_CERT_PASSWORD }}
       APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-      SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate tag format and match project.yml version
+        run: |
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Tag '$TAG' must look like v<major>.<minor>.<patch>"
+            exit 1
+          fi
+          source ./scripts/lib/common.sh
+          VERSION="$(cs_project_setting MARKETING_VERSION)"
+          if [[ -z "$VERSION" ]]; then
+            echo "::error::MARKETING_VERSION not found in project.yml"
+            exit 1
+          fi
+          if [[ "$TAG" != "v$VERSION" ]]; then
+            echo "::error::Tag '$TAG' does not match project.yml MARKETING_VERSION (expected v$VERSION)"
+            exit 1
+          fi
+          echo "Tag $TAG matches project.yml version $VERSION"
 
       - name: Select Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: "26.3"
 
-      - name: Download arm64 helper (optional)
-        if: needs.verify.outputs.pinned == 'true'
-        continue-on-error: true
-        uses: actions/download-artifact@v4
-        with:
-          name: core-helper-arm64
-          path: dist/core-helper/arm64
+      - name: Install xcodegen
+        run: brew install xcodegen
 
-      - name: Download x86_64 helper (optional)
-        if: ${{ needs.verify.outputs.pinned == 'true' && github.event_name == 'workflow_dispatch' && inputs.include_intel }}
-        continue-on-error: true
-        uses: actions/download-artifact@v4
-        with:
-          name: core-helper-x86_64
-          path: dist/core-helper/x86_64
+      - name: Verify metadata (incl. xcodegen drift check)
+        run: ./scripts/verify-metadata.sh --check-xcodegen
 
-      - name: Restore executable bits
-        run: |
-          if [[ -d dist/core-helper ]]; then
-            chmod -R +x dist/core-helper || true
-          fi
+      - name: Unit tests (Debug, unsigned)
+        run: ./scripts/build-app.sh --config Debug --action test
 
-      - name: Import signing certificate (skipped if secrets absent)
+      - name: Import signing certificate (skipped if no signing identity)
         if: ${{ env.CODESIGN_IDENTITY != '' }}
-        env:
-          CODESIGN_CERT_P12_BASE64: ${{ secrets.CODESIGN_CERT_P12_BASE64 }}
-          CODESIGN_CERT_PASSWORD: ${{ secrets.CODESIGN_CERT_PASSWORD }}
         run: |
           KEYCHAIN_PATH="$RUNNER_TEMP/release-signing.keychain-db"
           KEYCHAIN_PASSWORD="$(openssl rand -base64 24)"
@@ -167,26 +94,35 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           rm -f "$RUNNER_TEMP/cert.p12"
 
-      - name: Package release
-        env:
-          CS_PREBUILT_HELPER_ARM64: ${{ github.workspace }}/dist/core-helper/arm64
-          CS_PREBUILT_HELPER_X86_64: ${{ github.workspace }}/dist/core-helper/x86_64
+      - name: Store notary credentials (skipped unless fully configured)
+        if: ${{ env.CODESIGN_IDENTITY != '' && env.APPLE_ID != '' && env.APPLE_TEAM_ID != '' && env.APPLE_APP_SPECIFIC_PASSWORD != '' }}
         run: |
-          if [[ "${{ github.ref_type }}" == "tag" ]]; then
-            VERSION="${GITHUB_REF_NAME#v}"
-          else
-            VERSION="${{ inputs.version }}"
+          xcrun notarytool store-credentials "claude-swap-notary" \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+            --keychain "$RUNNER_TEMP/release-signing.keychain-db"
+          echo "NOTARY_PROFILE=claude-swap-notary" >> "$GITHUB_ENV"
+
+      - name: Package DMG (signed only if configured, notarized only if configured)
+        env:
+          DEVELOPER_ID_APPLICATION: ${{ secrets.CODESIGN_IDENTITY }}
+        run: |
+          ARGS=()
+          if [[ -n "${NOTARY_PROFILE:-}" ]]; then
+            ARGS+=(--notarize)
           fi
-          # Prefer arm64 single-arch DMG until dual-arch helpers are available.
-          ARCH_MODE="arm64"
-          if [[ -x dist/core-helper/arm64/*/claude-swap-helper ]] && [[ -x dist/core-helper/x86_64/*/claude-swap-helper ]]; then
-            ARCH_MODE="dual"
+          ./scripts/package-release.sh ${ARGS[@]+"${ARGS[@]}"}
+
+      - name: Check that exactly one DMG and one checksum exist
+        run: |
+          shopt -s nullglob
+          dmgs=(dist/*.dmg)
+          sums=(dist/*.dmg.sha256)
+          if [[ ${#dmgs[@]} -ne 1 || ${#sums[@]} -ne 1 ]]; then
+            echo "::error::Expected exactly one DMG and one .sha256 in dist/ (found ${#dmgs[@]} and ${#sums[@]})"
+            exit 1
           fi
-          # Clear prebuilt env vars when dirs are missing so package-release
-          # builds/skips helpers itself instead of treating empty dirs as ready.
-          [[ -d dist/core-helper/arm64 ]] || unset CS_PREBUILT_HELPER_ARM64
-          [[ -d dist/core-helper/x86_64 ]] || unset CS_PREBUILT_HELPER_X86_64
-          ./scripts/package-release.sh --config Release --version "$VERSION" --arch "$ARCH_MODE"
 
       - name: Upload release artifacts
         uses: actions/upload-artifact@v4
@@ -194,20 +130,58 @@ jobs:
           name: release-artifacts
           path: |
             dist/*.dmg
-            dist/*.sha256
-            dist/appcast-item-*.xml
-          if-no-files-found: warn
+            dist/*.dmg.sha256
+          if-no-files-found: error
 
-      - name: Create GitHub Release (draft)
-        uses: softprops/action-gh-release@v2
+  publish:
+    name: Create draft GitHub release
+    needs: package
+    runs-on: macos-15
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ github.ref_name }}
+      REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
         with:
-          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || format('v{0}', inputs.version) }}
-          name: ${{ github.ref_type == 'tag' && github.ref_name || format('v{0}', inputs.version) }}
-          draft: true
-          generate_release_notes: true
-          files: |
-            dist/*.dmg
-            dist/*.sha256
-            dist/appcast-item-*.xml
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: release-artifacts
+          path: dist
+
+      - name: Check artifacts and build release notes
+        run: |
+          shopt -s nullglob
+          dmgs=(dist/*.dmg)
+          sums=(dist/*.dmg.sha256)
+          if [[ ${#dmgs[@]} -ne 1 || ${#sums[@]} -ne 1 ]]; then
+            echo "::error::Expected exactly one DMG and one .sha256 in dist/ (found ${#dmgs[@]} and ${#sums[@]})"
+            exit 1
+          fi
+
+          NOTES="$RUNNER_TEMP/release-notes.md"
+          printf '%s\n' 'Claude Swap for macOS is a native companion for [claude-swap](https://github.com/realiti4/claude-swap) by realiti4. Account management is powered by the separately installed upstream `cswap` CLI, which is not bundled. This wrapper is maintained independently and is not an official upstream or Anthropic app.' > "$NOTES"
+
+          PRERELEASE_FLAG=""
+          case "${dmgs[0]}" in
+            *-unsigned.dmg)
+              PRERELEASE_FLAG="--prerelease"
+              printf '\n%s\n' '> **Unsigned experimental build.** This DMG is not signed and not notarized. macOS will warn on first launch. Verify the SHA-256 checksum before opening it.' >> "$NOTES"
+              ;;
+          esac
+          echo "PRERELEASE_FLAG=$PRERELEASE_FLAG" >> "$GITHUB_ENV"
+          echo "DMG_FILE=${dmgs[0]}" >> "$GITHUB_ENV"
+          echo "SHA_FILE=${sums[0]}" >> "$GITHUB_ENV"
+          echo "NOTES_FILE=$NOTES" >> "$GITHUB_ENV"
+
+      - name: Create draft release
+        run: |
+          # shellcheck disable=SC2086
+          gh release create "$TAG" \
+            --repo "$REPO" \
+            --draft \
+            --title "$TAG" \
+            --notes-file "$NOTES_FILE" \
+            $PRERELEASE_FLAG \
+            "$DMG_FILE" "$SHA_FILE"

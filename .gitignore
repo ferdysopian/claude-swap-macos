@@ -1,24 +1,14 @@
-# Python-generated files
-__pycache__/
-*.py[oc]
+# Build output
 build/
 dist/
-wheels/
-*.egg-info
-
-# Virtual environments
-.venv
-
-
-# macOS app packaging/build artifacts (scripts/**, see docs/PACKAGING.md)
-# build/ and dist/ above already cover the default output dirs; these are
-# extra names some scripts/flags can produce so they're never accidentally
-# committed if someone points --output/--workpath elsewhere under the repo.
-.venv-helper-build/
-.core-src-cache/
+DerivedData/
+xcuserdata/
 *.dmg
 *.dmg.sha256
-appcast-item-*.xml
-xcuserdata/
-DerivedData/
+
+# Python caches (scripts)
+__pycache__/
+*.py[oc]
+
+# macOS
 .DS_Store
