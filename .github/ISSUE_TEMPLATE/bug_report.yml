@@ -1,0 +1,77 @@
+name: Bug report
+description: Report a problem with the Claude Swap wrapper app
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a problem. This repository covers the macOS wrapper app only.
+
+        **Never paste or attach:** tokens or setup tokens, API keys, export files, email addresses of your accounts, or unsanitized logs. If a value like that appears in what you paste, replace it with `<redacted>` before submitting.
+  - type: input
+    id: app-version
+    attributes:
+      label: Claude Swap version
+      description: Shown in About, for example 0.2.0 (build 8).
+    validations:
+      required: true
+  - type: input
+    id: cli-version
+    attributes:
+      label: cswap (claude-swap CLI) version
+      description: The version shown in the app's diagnostics preview, or what you installed (for example via uv or pipx).
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version and chip
+      description: For example macOS 15.x on Apple silicon.
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How did you get the app?
+      options:
+        - Release DMG from GitHub Releases
+        - Built from source
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open the app
+        2. Go to ...
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened instead
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Sanitized diagnostics
+      description: Use Diagnostics in the app, review the preview, and paste only what you have checked. Do not attach logs from ~/Library/Logs/ClaudeSwap/ unless you have reviewed and redacted them.
+      render: text
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Before you submit
+      options:
+        - label: I have removed tokens, API keys, export files, and account email addresses from this report.
+          required: true
+        - label: I have looked for this problem in the existing issues.
+          required: true

@@ -1,122 +1,55 @@
-# Definition of Done
+# Definition of done
 
-Ship criteria for the Claude Swap native macOS app and its pinned Python core. Each item maps to **automated evidence** (CI artifact, test suite) and **manual evidence** (audit checklist, smoke test notes).
+Ship criteria for Claude Swap for macOS. The plan separates two milestones, and each has its own gate:
 
-This document tracks Phase 6 sign-off.
+1. **Source ready to publish:** the repository can be opened to the public with honest documentation and no personal data.
+2. **Binary ready for users:** a DMG that a user can install, with a CLI version that has passed the contract checklist.
 
-**Related matrices:** [`QA_MATRIX.md`](QA_MATRIX.md), [`SECURITY_REVIEW_CHECKLIST.md`](SECURITY_REVIEW_CHECKLIST.md), [`ACCESSIBILITY_REVIEW.md`](ACCESSIBILITY_REVIEW.md)
+Publishing the source and publishing a binary are separate decisions.
 
----
+Related: [`QA_MATRIX.md`](QA_MATRIX.md) (acceptance evidence), [`SECURITY_REVIEW_CHECKLIST.md`](SECURITY_REVIEW_CHECKLIST.md), [`RELEASE.md`](RELEASE.md).
 
-## Summary Status
+**Status key:** Met · Not met · Partial. Only **Met** is backed by evidence recorded below.
 
-| Phase | Gate | Status |
-|-------|------|--------|
-| 0 | Credential safety tests green on 3.12 + 3.14 | **Complete** |
-| 1 | Public Python API + tests | In progress (Python API) |
-| 2 | NDJSON bridge + contract tests | In progress (bridge) |
-| 3 | Swift app foundation builds | In progress (Swift app) |
-| 4 | Full product features | Pending |
-| 5 | Packaging, signing, updates | In progress (packaging) |
-| 6 | Final audit sign-off | Pending |
+## Milestone 1: source ready to publish
 
----
+| # | Requirement | Evidence | Status | Notes |
+|---|---|---|---|---|
+| S-1 | History and files audited for secrets and personal data | Audit report kept outside the repository | Not met | Required before visibility changes |
+| S-2 | Copyright and license decided | `LICENSE`, `THIRD_PARTY_NOTICES.md` | Met | `LICENSE`: Claude Swap for macOS contributors; upstream credited in `THIRD_PARTY_NOTICES.md` |
+| S-3 | README states the wrapper is independent and links realiti4 | `README.md` | Met | Credit line and disclaimer present |
+| S-4 | No personal paths, sibling checkout, fork, or local bridge required to build | `scripts/verify-metadata.sh`, clean-clone build | Not met | Clean-clone build not yet run |
+| S-5 | Contributor setup and test commands documented | `CONTRIBUTING.md`, `scripts/README.md` | Met | Documented; not yet tested by a second person |
+| S-6 | Issue, PR, security, and changelog files exist | `.github/`, `SECURITY.md`, `CHANGELOG.md` | Met | |
+| S-7 | No pull requests, issues, or messages sent to upstream as part of the work | Process record | Met | |
+| S-8 | No personal editor or tooling configuration committed | `git ls-files`, `.gitignore` | Met | Local tooling stays untracked |
 
-## Checklist
+## Milestone 2: binary ready for users
 
-| # | Requirement | Phase | Automated evidence | Manual evidence | Status | Notes |
-|---|-------------|-------|-------------------|-----------------|--------|-------|
-| 1 | Documented reusable Python library API | 1 | `tests/api/*` green in CI | `docs/api.md` matches `claude_swap.api` exports | ☐ | `src/claude_swap/api/` not yet present |
-| 2 | CLI / TUI / JSON / menubar compatibility | 1 | Full `pytest` green; `test_cli.py`, `test_json_output.py`, `test_tui.py`, `test_menubar.py` | Spot-check menubar on macOS | ☐ Partial | Core CLI tests exist; menubar optional dep |
-| 3 | Baseline credential failures resolved | 0 | 11 critical tests × 3.12 + 3.14 CI job | QA security review §1 | ☑ | **1529 passed** full suite; critical subset green |
-| 4 | Native SwiftUI macOS app | 3 | `xcodebuild -scheme ClaudeSwap -configuration Debug build` | Launch smoke on macOS 14+ | ☐ | Xcode project in progress |
-| 5 | No end-user Python installation required | 5 | Unsigned `scripts/build-app.sh` artifact in CI | Fresh VM: launch without system Python | ☐ | |
-| 6 | Existing accounts appear on first launch | 3 | Integration test with temp HOME + real backup layout | Manual test with `~/.claude-swap-backup` | ☐ | |
-| 7 | Native account operations (switch, add, remove, move) | 4 | Bridge integration + XCUITest flows | Manual switch/add/remove | ☐ | |
-| 8 | Usage / quota states render correctly | 4 | `SnapshotModelTests` + fixture decode | Dashboard visual review | ☐ | |
-| 9 | Auto-switch uses shared engine with CLI | 4 | `tests/bridge/test_events.py` | Same `settings.json` behavior CLI vs app | ☐ | |
-| 10 | One helper process, one shared AppModel | 3 | Integration test: single bridge PID | Activity Monitor: one helper | ☐ | |
-| 11 | No secrets in snapshots, logs, or diagnostics | 2, 6 | `tests/bridge/test_redaction.py`, `test_json_output.py` | [`SECURITY_REVIEW_CHECKLIST.md`](SECURITY_REVIEW_CHECKLIST.md) §6 | ☐ Partial | JSON output tested; bridge pending |
-| 12 | Graceful degradation (Keychain, network, helper crash) | 4, 6 | Swift integration tests | Locked Keychain manual; offline manual | ☐ | |
-| 13 | No duplicate Python core in macos repo | 3 | CI tree check: no `src/claude_swap/` | Repo inspection | ☐ In progress | Python duplicate removed; app scaffold pending |
-| 14 | Pinned GitHub core dependency | 5 | `scripts/verify-core.sh` in CI | `Dependencies/CoreDependency.lock.json` review | ☐ | packaging |
-| 15 | Sparkle update channel ready | 5 | Release workflow produces appcast + signed DMG | Appcast XML + signature validation | ☐ | |
-| 16 | All tests pass | 6 | CI green: Python matrix + bridge + Swift | Final run transcript attached | ☐ Partial | Python core green; Swift TBD |
-| 17 | Accessibility polished | 6 | XCUITest accessibility identifiers | [`ACCESSIBILITY_REVIEW.md`](ACCESSIBILITY_REVIEW.md) sign-off | ☐ | |
-| 18 | Developer documentation complete | 6 | Doc inventory in repo | External dev dry-run bootstrap | ☐ Partial | QA/security/a11y docs started |
-| 19 | No placeholders in production paths | 6 | CI grep gate for TODO/FIXME in `ClaudeSwap/`, bridge | Manual stub audit | ☐ | |
-| 20 | Final clean build reproducible | 6 | Recorded commands in `docs/RELEASE.md` | Artifact paths: `.app`, DMG, helper binary | ☐ | |
+| # | Requirement | Evidence | Status | Notes |
+|---|---|---|---|---|
+| B-1 | A CLI version passes the official-package contract checklist | `CLI_COMPATIBILITY.md`, `QA_MATRIX.md` contract runs | Not met | `verifiedVersions` is empty |
+| B-2 | Every acceptance scenario in the QA matrix is passed | `QA_MATRIX.md` | Not met | All rows Not run |
+| B-3 | No demo fallback presented as user data | Discovery and backend code; manual check A-1 | Not met | Code still needs to be confirmed against this rule |
+| B-4 | Account changes, settings, transfer, and automation show real results | Contract runs C-4 to C-14; manual smoke test | Not met | |
+| B-5 | Process, redaction, and service tests pass in CI | CI `build-test` | Not met | CI run not recorded |
+| B-6 | App version and artifact version match | `scripts/verify-metadata.sh`, `package-release.sh` version check | Not met | |
+| B-7 | DMG installed and run on a clean machine | Manual smoke test | Not met | |
+| B-8 | Credit to realiti4 in README, About, and release notes | README, About, release template | Partial | About screen wording not yet checked |
+| B-9 | Signing and notarization status stated honestly | Release notes and artifact name | Partial | Unsigned build path works by design; signing not performed |
+| B-10 | Tag, release workflow, and draft release verified | `release.yml` | Not met | No tag has been pushed by this work |
 
-**Legend:** ☑ Done · ☐ Not done · ☐ Partial
+## Summary
 
----
+| Milestone | Status |
+|---|---|
+| 1. Source ready to publish | Not met (documentation largely in place; audit and clean-clone checks pending) |
+| 2. Binary ready for users | Not met |
 
-## Phase Gates
+## Release sign-off
 
-### Phase 0 — Complete
+| Role | Name | Date | Notes |
+|---|---|---|---|
+| Maintainer | | | |
 
-**Entry:** Identical Python baseline in both repos.  
-**Exit criteria:**
-
-- [x] P0-3: Critical credential tests pass on Python 3.12 and 3.14
-- [x] P0-2: Full suite ≥ 1529 passed, 3 skipped
-- [x] QA Phase 0 security review of credential fixes (see parent deliverable)
-
-**Recorded commands:**
-
-```bash
-cd claude-swap
-uv run pytest -q                                    # 1529 passed, 3 skipped
-uv run pytest tests/test_move_accounts.py tests/test_swap_accounts.py \
-  -k "strict_clear or metadata_failure or same_email or failed_required" -v
-uv run --python 3.12 pytest tests/test_move_accounts.py tests/test_swap_accounts.py \
-  -k "strict_clear or metadata_failure or same_email or failed_required" -v
-```
-
-### Phase 1 — Python API
-
-**Exit:** DoD #1, #2; `tests/api/*` in CI.
-
-### Phase 2 — Bridge
-
-**Exit:** DoD #11 (bridge portion); P2-1 through P2-12 in [`QA_MATRIX.md`](QA_MATRIX.md).
-
-### Phase 3 — App Foundation
-
-**Exit:** DoD #4, #6, #10, #13.
-
-### Phase 4 — Product
-
-**Exit:** DoD #7, #8, #9, #12 (partial).
-
-### Phase 5 — Release Engineering
-
-**Exit:** DoD #5, #14, #15.
-
-### Phase 6 — Final Audit
-
-**Exit:** All 20 items ☑; QA sign-off below.
-
----
-
-## Evidence Log
-
-| Date | Item # | Evidence type | Reference |
-|------|--------|---------------|-----------|
-| 2026-07-22 | 3 | Automated | `uv run pytest -q` → 1529 passed, 3 skipped |
-| 2026-07-22 | 3 | Automated | Critical subset 11/11 pass on 3.12 and 3.14 |
-| 2026-07-22 | 3 | Manual | QA Phase 0 security review — **approved** |
-| 2026-07-22 | 18 | Manual | Created `docs/QA_MATRIX.md`, `SECURITY_REVIEW_CHECKLIST.md`, `ACCESSIBILITY_REVIEW.md`, `DEFINITION_OF_DONE.md` |
-
----
-
-## Final Sign-off (Phase 6)
-
-| Role | Name | Date | Signature |
-|------|------|------|-----------|
-| QA / Audit | | | |
-| Release owner | | | |
-
-**Release blockers (if any):**
-
-_None recorded._
+**Release blockers:** B-1, B-2, B-4, B-7. Source publication blockers: S-1, S-4, S-8.

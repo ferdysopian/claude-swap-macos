@@ -1,5 +1,7 @@
 # ADR 0001: Bundle the existing Python core as a frozen helper process, rather than rewriting the switch logic in Swift
 
+> **Status: Superseded by [ADR 0002](0002-wrapper-uses-installed-cli.md) for release 1.** Release 1 does not bundle a helper; the wrapper calls the officially installed `cswap` CLI. The reasoning below is kept as history.
+
 - **Status:** Accepted
 - **Date:** 2026-07-22
 - **Owners:** Packaging/CI/Release, with input from bridge and Swift app owners

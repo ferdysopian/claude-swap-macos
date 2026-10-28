@@ -1,0 +1,31 @@
+name: Feature request
+description: Suggest an improvement to the Claude Swap wrapper app
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The wrapper drives the separately installed `cswap` CLI. Account switching decisions and credential handling belong to the CLI; features here should use the CLI's public commands. Do not include tokens, export files, or account emails.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Checks
+      options:
+        - label: I have not included any tokens, export files, or account email addresses.
+          required: true
