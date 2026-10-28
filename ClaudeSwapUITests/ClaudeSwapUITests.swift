@@ -19,6 +19,9 @@ final class ClaudeSwapUITests: XCTestCase {
     func testMainWindowShowsAllTabsAfterOnboarding() throws {
         let app = XCUIApplication()
         app.launchArguments += ["-uiTestSkipOnboarding", "1"]
+        // XCUIApplication launches don't inherit the scheme's environment;
+        // force demo data so the test never touches a real cswap.
+        app.launchEnvironment["CLAUDE_SWAP_BACKEND"] = "fixture"
         app.launch()
 
         // Onboarding's final step is "Get Started"; if onboarding is showing

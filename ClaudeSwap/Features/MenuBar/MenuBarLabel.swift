@@ -63,7 +63,7 @@ struct MenuBarLabel: View {
 /// Pure formatting helpers, unit-testable without rendering a view.
 enum MenuBarLabelFormatter {
     /// Compact text shown next to the menu-bar glyph (or `nil` when only the glyph should show).
-    /// Example: `Globex · 22% · 1h 41m` when name, percentage, and reset are enabled.
+    /// Example: `Work · 22% · 1h 41m` when name, percentage, and reset are enabled.
     static func displayText(
         for account: Account?,
         showsPercentage: Bool,

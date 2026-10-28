@@ -31,7 +31,13 @@ struct MenuBarView: View {
         VStack(alignment: .leading, spacing: AppSpacing.sm) {
             header
 
-            if allAccounts.isEmpty {
+            if appModel.connectionState == .fixtureMode {
+                DemoDataBadge()
+            }
+
+            if !appModel.canMutate {
+                ConnectionProblemView(compact: true)
+            } else if allAccounts.isEmpty {
                 EmptyState(
                     systemImage: "person.crop.circle.badge.questionmark",
                     title: "No accounts yet",
@@ -45,7 +51,7 @@ struct MenuBarView: View {
                     ForEach(allAccounts) { account in
                         let isActive = account.id == appModel.snapshot.activeAccountId
                         AccountMenuRow(account: account, isActive: isActive) {
-                            guard !isActive else { return }
+                            guard !isActive, appModel.canMutate else { return }
                             Task { await appModel.switchAccount(id: account.id) }
                         }
                     }
@@ -64,7 +70,7 @@ struct MenuBarView: View {
                 } label: {
                     Label("Rotate Best", systemImage: "arrow.triangle.2.circlepath")
                 }
-                .disabled(appModel.isBusy || allAccounts.count < 2)
+                .disabled(appModel.isBusy || !appModel.canMutate || allAccounts.count < 2)
                 .accessibilityHint("Switches to whichever switchable account has the most headroom left.")
 
                 Spacer()
@@ -105,7 +111,7 @@ struct MenuBarView: View {
         case .connecting: return .connecting
         case .connected: return .connected
         case .fixtureMode: return .fixture
-        case .disconnected: return .disconnected
+        case .disconnected, .cliNotFound, .incompatible: return .disconnected
         }
     }
 
@@ -132,12 +138,14 @@ private struct AutoSwitchRow: View {
             Text("Auto-Switch").font(AppTypography.subheadline)
         }
         .toggleStyle(.switch)
+        .disabled(!appModel.canMutate || appModel.isBusy)
         .accessibilityLabel("Auto-switch")
         .accessibilityHint("When on, switches accounts automatically before you hit a usage limit.")
     }
 }
 
 private struct AccountMenuRow: View {
+    @Environment(AppModel.self) private var appModel
     let account: Account
     let isActive: Bool
     let onSwitch: () -> Void
@@ -170,7 +178,7 @@ private struct AccountMenuRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(isDisabled && !isActive)
+        .disabled((isDisabled && !isActive) || !appModel.canMutate)
         .opacity(account.disabled ? 0.5 : 1)
         .accessibilityLabel(Text(account.displayName))
         .accessibilityHint(isActive ? "Currently active" : (isDisabled ? "Not switchable right now" : "Switch to this account"))

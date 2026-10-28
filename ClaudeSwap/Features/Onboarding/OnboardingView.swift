@@ -2,8 +2,8 @@
 //  OnboardingView.swift
 //  ClaudeSwap
 //
-//  First-run flow: welcome -> Claude Code check -> accounts detected ->
-//  Keychain explanation -> launch-at-login offer -> done. Every step is
+//  First-run flow: welcome -> cswap check -> accounts detected ->
+//  privacy notes -> launch-at-login offer -> done. Every step is
 //  driven by real `AppModel` state (the detected accounts, in particular)
 //  rather than placeholder copy.
 //
@@ -14,7 +14,6 @@ struct OnboardingView: View {
     @Environment(AppModel.self) private var appModel
     @State private var step = 0
     @State private var launchAtLoginChoice = true
-    @State private var claudeCodeFound: Bool?
 
     private let stepCount = 5
 
@@ -30,9 +29,9 @@ struct OnboardingView: View {
             Group {
                 switch step {
                 case 0: WelcomeStep()
-                case 1: ClaudeCodeCheckStep(found: $claudeCodeFound)
+                case 1: CLICheckStep()
                 case 2: AccountsDetectedStep()
-                case 3: KeychainExplainStep()
+                case 3: PrivacyStep()
                 default: LaunchAtLoginStep(choice: $launchAtLoginChoice)
                 }
             }
@@ -83,6 +82,9 @@ private struct WelcomeStep: View {
                 .font(AppTypography.body)
                 .foregroundStyle(AppColors.textSecondary)
                 .multilineTextAlignment(.center)
+            Text("A native macOS companion for claude-swap by realiti4. Account management is done by the separately installed cswap CLI.")
+                .font(AppTypography.subheadline)
+                .foregroundStyle(AppColors.textSecondary)
             Text("Not affiliated with or endorsed by Anthropic.")
                 .font(AppTypography.caption)
                 .foregroundStyle(AppColors.textTertiary)
@@ -91,26 +93,80 @@ private struct WelcomeStep: View {
     }
 }
 
-private struct ClaudeCodeCheckStep: View {
-    @Binding var found: Bool?
+private struct CLICheckStep: View {
+    @Environment(AppModel.self) private var appModel
 
     var body: some View {
         VStack(spacing: AppSpacing.md) {
-            Image(systemName: found == false ? "exclamationmark.triangle" : "checkmark.seal")
-                .font(.system(size: 44))
-                .foregroundStyle(found == false ? AppColors.status(.attention) : AppColors.status(.normal))
-            Text("Checking for Claude Code")
-                .font(AppTypography.title)
-            Text(found == false
-                 ? "We couldn't confirm a Claude Code installation. You can still continue — Claude Swap will just show preview data until it detects one."
-                 : "Claude Swap works alongside your existing Claude Code CLI installation and manages the credentials it already uses.")
-                .font(AppTypography.body)
-                .foregroundStyle(AppColors.textSecondary)
-                .multilineTextAlignment(.center)
+            switch appModel.connectionState {
+            case .connecting:
+                ProgressView()
+                Text("Looking for cswap…").font(AppTypography.title)
+            case .connected:
+                icon("checkmark.seal", AppColors.status(.normal))
+                Text("cswap found").font(AppTypography.title)
+                if let path = appModel.backendStatus?.executablePath {
+                    Text(path)
+                        .font(.system(.caption, design: .monospaced))
+                        .textSelection(.enabled)
+                }
+                if let version = appModel.backendStatus?.version {
+                    Text("Version \(version)")
+                        .font(AppTypography.subheadline)
+                        .foregroundStyle(AppColors.textSecondary)
+                }
+            case .fixtureMode:
+                icon("theatermasks", AppColors.status(.attention))
+                Text("Demo data").font(AppTypography.title)
+                Text("Claude Swap is showing demo data, not your accounts.")
+                    .font(AppTypography.body)
+                    .foregroundStyle(AppColors.textSecondary)
+            case .cliNotFound(let path):
+                icon("exclamationmark.triangle", AppColors.status(.attention))
+                Text(path.map { "No executable cswap at \($0)" } ?? "cswap isn't installed")
+                    .font(AppTypography.title)
+                    .multilineTextAlignment(.center)
+                Text("Install it yourself with one of these commands. Claude Swap won't install anything for you.")
+                    .font(AppTypography.body)
+                    .foregroundStyle(AppColors.textSecondary)
+                CopyableCommand(command: "uv tool install claude-swap")
+                CopyableCommand(command: "pipx install claude-swap")
+            case .incompatible(let reason):
+                icon("exclamationmark.triangle", AppColors.status(.attention))
+                Text("This cswap can't be used").font(AppTypography.title)
+                Text(reason)
+                    .font(AppTypography.body)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .textSelection(.enabled)
+            case .disconnected(let reason):
+                icon("exclamationmark.triangle", AppColors.status(.critical))
+                Text("Couldn't run cswap").font(AppTypography.title)
+                Text(Redactor.sanitize(reason ?? "cswap didn't respond."))
+                    .font(AppTypography.body)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .textSelection(.enabled)
+            }
+
+            if needsRecheck {
+                Button("Re-check") { appModel.reconnect() }
+                    .disabled(appModel.isBusy)
+                Text("Installed somewhere unusual? Choose it in Settings › Advanced › Command-Line Tool. You can also continue now and set this up later.")
+                    .font(AppTypography.caption)
+                    .foregroundStyle(AppColors.textTertiary)
+            }
         }
-        .task {
-            found = FileManager.default.fileExists(atPath: NSHomeDirectory() + "/.claude")
+        .multilineTextAlignment(.center)
+    }
+
+    private var needsRecheck: Bool {
+        switch appModel.connectionState {
+        case .cliNotFound, .incompatible, .disconnected: return true
+        default: return false
         }
+    }
+
+    private func icon(_ name: String, _ color: Color) -> some View {
+        Image(systemName: name).font(.system(size: 44)).foregroundStyle(color)
     }
 }
 
@@ -130,7 +186,7 @@ private struct AccountsDetectedStep: View {
                     .foregroundStyle(AppColors.textSecondary)
                     .multilineTextAlignment(.center)
             } else {
-                Text("Found \(appModel.snapshot.accounts.count) account\(appModel.snapshot.accounts.count == 1 ? "" : "s") already known to Claude Swap:")
+                Text("Found \(appModel.snapshot.accounts.count) account\(appModel.snapshot.accounts.count == 1 ? "" : "s") managed by cswap:")
                     .font(AppTypography.body)
                     .foregroundStyle(AppColors.textSecondary)
                 VStack(alignment: .leading, spacing: AppSpacing.xxs) {
@@ -141,19 +197,19 @@ private struct AccountsDetectedStep: View {
                 }
             }
         }
-        .task { await appModel.refreshSnapshot() }
+        .task { if appModel.canMutate { await appModel.refreshSnapshot() } }
     }
 }
 
-private struct KeychainExplainStep: View {
+private struct PrivacyStep: View {
     var body: some View {
         VStack(spacing: AppSpacing.md) {
             Image(systemName: "lock.shield")
                 .font(.system(size: 44))
                 .foregroundStyle(AppColors.accentSecondary)
-            Text("Your credentials stay in the Keychain")
+            Text("Privacy")
                 .font(AppTypography.title)
-            Text("Claude Swap never stores tokens in preferences, logs, or on disk in plain text. Every credential is read from and written to the macOS Keychain, the same place Claude Code itself keeps them.")
+            Text("Claude Swap itself sends no telemetry. The cswap tool it runs stores and switches your account credentials, and contacts Anthropic services to read usage. Claude Swap never asks for or stores your tokens in its own preferences or logs.")
                 .font(AppTypography.body)
                 .foregroundStyle(AppColors.textSecondary)
                 .multilineTextAlignment(.center)
